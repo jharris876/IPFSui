@@ -30,7 +30,14 @@ app.use(
   '/ipfs',
   createProxyMiddleware({
     target: 'http://127.0.0.1:8080',
-    changeOrigin: true
+    changeOrigin: true,
+    onProxyReq(proxyReq, req, res) {
+      console.log('[PROXY] forwarding:', req.originalUrl);
+    },
+    onError(err, req, res) {
+      console.error('[PROXY ERROR]', err);
+      res.status(500).send('Proxy error');
+    }
   })
 );
 
