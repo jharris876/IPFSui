@@ -32,11 +32,11 @@ app.use(
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
     onProxyReq(proxyReq, req, res) {
-      console.log('[PROXY] forwarding:', req.originalUrl);
+      console.log('[PROXY] caught:', req.originalUrl);
     },
     onError(err, req, res) {
-      console.error('[PROXY ERROR]', err);
-      res.status(500).send('Proxy error');
+      console.error('[PROXY ERROR]', err.message);
+      res.status(502).send('Gateway error');
     }
   })
 );
