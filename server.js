@@ -27,11 +27,16 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Proxy /ipfs/* → your local IPFS gateway on :8080
 const proxy = httpProxy.createProxyServer();
-app.all('/ipfs/*', (req, res) => {
-  proxy.web(req, res, { target: 'http://127.0.0.1:8080' }, err => {
-    console.error('[PROXY ERROR]', err);
-    res.sendStatus(502);
-  });
+app.get('/ipfs/:cid', (req, res) => {
+  proxy.web(
+    req,
+    res,
+    { target: 'http://127.0.0.1:8080' },
+    err => {
+      console.error('[PROXY ERROR]', err);
+      res.sendStatus(502);
+    }
+  );
 });
 
 // 4) Static UI
