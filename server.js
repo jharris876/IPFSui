@@ -13,6 +13,12 @@ const __dirname = path.dirname(__filename);
 // 1) Create the app
 const app = express();
 
+// ——— REQUEST LOGGER ———
+app.use((req, res, next) => {
+  console.log('[REQ]', req.method, req.originalUrl);
+  next();
+});
+
 // 2) Connect to IPFS daemon
 const ipfs = create({ url: 'http://localhost:5001/api/v0' });
 
