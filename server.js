@@ -23,9 +23,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(
   '/ipfs',
   createProxyMiddleware({
-    target: 'http://localhost:8080',
+    target: 'http://127.0.0.1:8080',
     changeOrigin: true,
-    // No pathRewrite needed; /ipfs/<cid> stays /ipfs/<cid>
+    pathRewrite: { '^/ipfs': '/ipfs' }
   })
 );
 
