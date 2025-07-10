@@ -22,7 +22,12 @@ form.addEventListener('submit', async e => {
       throw new Error(err.error || 'Unknown error');
     }
     const { cid } = await res.json();
-    resultDiv.innerHTML = `CID: <a href="https://ipfs.io/ipfs/${cid}" target="_blank">${cid}</a>`;
+    resultDiv.innerHTML = `
+      CID:
+      <a href="/ipfs/${cid}" target="_blank" rel="noopener">
+        ${cid}
+      </a>
+    `;
   } catch (err) {
     resultDiv.textContent = `Error: ${err.message}`;
   }

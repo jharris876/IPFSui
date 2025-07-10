@@ -4,6 +4,7 @@ import multer from 'multer';
 import { create } from 'ipfs-http-client';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // Derive __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +18,16 @@ const ipfs = create({ url: 'http://localhost:5001/api/v0' });
 
 // 3) Multer in-memory
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Proxy /ipfs/* → your local IPFS gateway on :8080
+app.use(
+  '/ipfs',
+  createProxyMiddleware({
+    target: 'http://localhost:8080',
+    changeOrigin: true,
+    // No pathRewrite needed; /ipfs/<cid> stays /ipfs/<cid>
+  })
+);
 
 // 4) Static UI
 app.use(express.static(path.join(__dirname, 'public')));
