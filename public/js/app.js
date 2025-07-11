@@ -1,34 +1,49 @@
-// public/js/app.js
-const form = document.getElementById('uploadForm');
-const resultDiv = document.getElementById('result');
+const form        = document.getElementById('uploadForm');
+const resultDiv   = document.getElementById('result');
+const progressBar = document.getElementById('uploadProgress');
 
-form.addEventListener('submit', async e => {
+form.addEventListener('submit', e => {
   e.preventDefault();
-  if (!form.file.files.length) return;
-
   const file = form.file.files[0];
-  const data = new FormData();
-  data.append('file', file);
+  if (!file) return;
 
+  // Prepare UI
+  progressBar.value = 0;
+  progressBar.style.display = 'block';
   resultDiv.textContent = 'Uploading…';
 
-  try {
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: data
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Unknown error');
+  // Build the XHR
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+
+  // Update progress bar
+  xhr.upload.onprogress = event => {
+    if (event.lengthComputable) {
+      const percent = Math.round((event.loaded / event.total) * 100);
+      progressBar.value = percent;
     }
-    const { cid } = await res.json();
-    resultDiv.innerHTML = `
-      CID:
-      <a href="/ipfs/${cid}" target="_blank" rel="noopener">
-        ${cid}
-      </a>
-    `;
-  } catch (err) {
-    resultDiv.textContent = `Error: ${err.message}`;
-  }
+  };
+
+  // On success
+  xhr.onload = () => {
+    progressBar.style.display = 'none';
+    if (xhr.status >= 200 && xhr.status < 300) {
+      const { cid } = JSON.parse(xhr.responseText);
+      resultDiv.innerHTML = 
+        `CID: <a href="/ipfs/${cid}" target="_blank" rel="noopener">${cid}</a>`;
+    } else {
+      resultDiv.textContent = `Upload failed: ${xhr.statusText}`;
+    }
+  };
+
+  // On error
+  xhr.onerror = () => {
+    progressBar.style.display = 'none';
+    resultDiv.textContent = 'Upload error — please try again.';
+  };
+
+  // Send the form
+  const formData = new FormData();
+  formData.append('file', file);
+  xhr.send(formData);
 });
