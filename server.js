@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import httpProxy from 'http-proxy';
 import multipartRouter from './routes/multipart.js';
 import multer from 'multer';
+import catalogRouter from './routes/catalog.js'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -47,6 +48,8 @@ app.get('/ipfs/:cid', (req, res) => {
   );
 });
 
+//server the catalog
+app.use('/api/catalog', catalogRouter);
 // --- serve your front-end
 app.use(express.static(path.join(__dirname, 'public')));
 
