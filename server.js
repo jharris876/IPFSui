@@ -1,31 +1,38 @@
 // server.js
+import 'dotenv/config';
 import express from 'express';
-import multer from 'multer';
-import { create } from 'ipfs-http-client';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import httpProxy from 'http-proxy';
+import multipartRouter from './routes/multipart.js';
 
-// Derive __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname  = path.dirname(__filename);
 
-// 1) Create the app
 const app = express();
 
-// ——— REQUEST LOGGER ———
+// --- basic request log (handy while we wire this up)
 app.use((req, res, next) => {
   console.log('[REQ]', req.method, req.originalUrl);
   next();
 });
 
-// 2) Connect to IPFS daemon
-const ipfs = create({ url: 'http://localhost:5001/api/v0' });
+// --- only small JSON bodies for control endpoints
+app.use(express.json({ limit: '1mb' }));
 
-// 3) Multer in-memory
-const upload = multer({ storage: multer.memoryStorage() });
+// --- bearer token guard for the presign endpoints
+const UPLOAD_TOKEN = process.env.APP_UPLOAD_TOKEN || '';
+function requireToken(req, res, next) {
+  const auth  = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : auth;
+  if (!UPLOAD_TOKEN || token === UPLOAD_TOKEN) return next();
+  return res.status(401).json({ error: 'unauthorized' });
+}
 
-// Proxy /ipfs/* → your local IPFS gateway on :8080
+// --- presigned multipart endpoints
+app.use('/api/multipart', requireToken, multipartRouter);
+
+// --- proxy /ipfs/:cid → local IPFS gateway on 8080 (so clicking CIDs still works)
 const proxy = httpProxy.createProxyServer();
 app.get('/ipfs/:cid', (req, res) => {
   proxy.web(
@@ -39,31 +46,16 @@ app.get('/ipfs/:cid', (req, res) => {
   );
 });
 
-// 4) Static UI
+// --- serve your front-end
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 5) Upload endpoint
-app.post('/api/upload', upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-  try {
-    const { buffer, originalname } = req.file;
-    const result = await ipfs.add({ path: originalname, content: buffer });
-    return res.json({ cid: result.cid.toString() });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'IPFS upload failed' });
-  }
-});
-
-// 6) Only start the server if this file is run directly
+// --- start the server
 if (process.env.NODE_ENV !== 'test') {
   const port = process.env.PORT || 3000;
-  app.listen(port, () =>
-    console.log(`Server running on http://localhost:${port}`)
+  app.listen(port, '0.0.0.0', () =>
+    console.log(`Server running on http://0.0.0.0:${port}`)
   );
 }
 
-// 7) Export the app for testing
 export default app;
+
