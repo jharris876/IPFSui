@@ -121,3 +121,104 @@ directForm.addEventListener('submit', async (e) => {
     setTimeout(() => { overallBar.style.display = 'none'; }, 1500);
   }
 });
+// ===== Catalog (list + item details) =====
+const catalogForm   = document.getElementById('catalogForm');
+const catalogPrefix = document.getElementById('catalogPrefix');
+const catalogMeta   = document.getElementById('catalogMeta');
+const catalogTable  = document.getElementById('catalogTable').querySelector('tbody');
+const catalogMore   = document.getElementById('catalogMore');
+
+let nextToken = null;
+let currentPrefix = '';
+
+function fmtBytes(n) {
+  const u = ['B','KB','MB','GB','TB']; let i = 0;
+  while (n >= 1024 && i < u.length-1) { n/=1024; i++; }
+  return `${n.toFixed(1)} ${u[i]}`;
+}
+
+async function fetchList(prefix, token=null) {
+  const url = new URL('/api/catalog/list', window.location.origin);
+  if (prefix) url.searchParams.set('prefix', prefix);
+  url.searchParams.set('max', '50');
+  if (token) url.searchParams.set('token', token);
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`list failed: ${await res.text()}`);
+  const data = await res.json();
+
+  // Render rows
+  data.items.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="word-break:break-all">${item.key}</td>
+      <td style="text-align:right;white-space:nowrap">${fmtBytes(item.size)}</td>
+      <td>${item.lastModified || ''}</td>
+      <td>
+        <button class="get-cid" data-key="${item.key}">Get CID</button>
+        <span class="cid-slot" style="margin-left:.5rem;color:#555"></span>
+      </td>
+    `;
+    catalogTable.appendChild(tr);
+  });
+
+  nextToken = data.nextToken;
+  catalogMore.style.display = nextToken ? 'inline-block' : 'none';
+
+  const count = catalogTable.querySelectorAll('tr').length;
+  catalogMeta.textContent = `Showing ${count} item(s)${prefix ? ` for prefix "${prefix}"` : ''}.`;
+}
+
+catalogForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  currentPrefix = catalogPrefix.value.trim();
+  catalogTable.innerHTML = '';
+  nextToken = null;
+  catalogMeta.textContent = 'Loading…';
+  try {
+    await fetchList(currentPrefix, null);
+  } catch (err) {
+    console.error(err);
+    catalogMeta.textContent = `Error: ${err.message}`;
+  }
+});
+
+catalogMore?.addEventListener('click', async () => {
+  if (!nextToken) return;
+  try {
+    await fetchList(currentPrefix, nextToken);
+  } catch (err) {
+    console.error(err);
+    catalogMeta.textContent = `Error: ${err.message}`;
+  }
+});
+
+// Delegate clicks for "Get CID"
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button.get-cid');
+  if (!btn) return;
+  btn.disabled = true;
+  const key = btn.dataset.key;
+  const slot = btn.parentElement.querySelector('.cid-slot');
+  slot.textContent = '…';
+
+  try {
+    const url = new URL('/api/catalog/item', window.location.origin);
+    url.searchParams.set('key', key);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`item failed: ${await res.text()}`);
+    const { cid, url: gw } = await res.json();
+    if (gw) {
+      slot.innerHTML = `<a href="${gw}" target="_blank" rel="noopener">${cid || 'open'}</a>`;
+    } else if (cid) {
+      slot.textContent = cid;
+    } else {
+      slot.textContent = 'CID not available yet';
+    }
+  } catch (err) {
+    console.error(err);
+    slot.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});

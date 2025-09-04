@@ -36,4 +36,27 @@
 
   <script src="/js/app.js"></script>
 </body>
+<hr>
+<h2>Bucket Catalog</h2>
+
+<form id="catalogForm" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+  <input type="text" id="catalogPrefix" placeholder="Filter by prefix (e.g. 2025/09/04/)" style="min-width:320px;">
+  <button type="submit">Load</button>
+</form>
+
+<div id="catalogMeta" class="muted" style="margin:.5rem 0;"></div>
+
+<table id="catalogTable" border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+  <thead>
+    <tr>
+      <th style="text-align:left;">Key</th>
+      <th style="text-align:right;">Size</th>
+      <th style="text-align:left;">Last Modified</th>
+      <th style="text-align:left;">Action</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<button id="catalogMore" style="margin-top:.5rem;display:none;">Load more</button>
 </html>
