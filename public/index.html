@@ -2,61 +2,64 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Direct Upload to Filebase</title>
+  <title>Direct Upload to Filebase + Catalog</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 2rem; max-width: 900px; }
-    h1 { margin-bottom: .25rem; }
-    .muted { color:#666; margin-top:0; }
-    form { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
-    input[type="file"] { flex: 1 1 auto; min-width: 260px; }
-    input[type="password"] { flex: 1 1 320px; }
-    button { padding:.6rem 1rem; }
-    progress { width:100%; height:1.25rem; margin-top:.75rem; display:none; }
-    #directResult { margin-top:.75rem; white-space:break-spaces; }
-    .note { font-size:.9rem; color:#555; margin-top:.25rem; }
+    :root { --fg:#111; --muted:#666; --border:#ddd; --bg:#fafafa; }
+    body { font-family: system-ui, Arial, sans-serif; color:var(--fg); margin:2rem; max-width:1000px; }
+    h1,h2 { margin:.2rem 0 .6rem; }
+    p.muted { color:var(--muted); margin-top:0; }
+    form.inline { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+    input[type="file"] { min-width:260px; }
+    input[type="password"], input[type="text"] { padding:.5rem; min-width:320px; }
+    button { padding:.55rem 1rem; cursor:pointer; }
+    progress { width:100%; height:1.2rem; margin:.6rem 0; display:none; }
+    #directResult { margin-top:.5rem; white-space:break-spaces; }
+    table { width:100%; border-collapse:collapse; margin-top:.5rem; }
+    th, td { border:1px solid var(--border); padding:.5rem; vertical-align:top; }
+    th { background:var(--bg); text-align:left; }
+    .note { color:var(--muted); font-size:.92rem; }
   </style>
 </head>
 <body>
   <h1>Direct Upload to Filebase</h1>
-  <p class="muted">Uploads go straight from your browser → Filebase via presigned URLs.</p>
+  <p class="muted">Uploads go straight from your browser → Filebase via presigned URLs (multipart for large files).</p>
 
-  <form id="directUploadForm">
+  <form id="directUploadForm" class="inline">
     <input type="file" id="directFile" name="file" required />
-
-    <!-- TEMP for testing only. We'll replace with real auth later. -->
+    <!-- TEMP for testing only; we’ll replace with real auth later -->
     <input type="password" id="uploadToken" placeholder="Paste APP_UPLOAD_TOKEN (temporary)" required />
-
     <button type="submit">Upload</button>
   </form>
-  <div class="note">Large files are uploaded in chunks with resume-friendly multipart.</div>
+  <div class="note">Large files upload in chunks; progress is shown below.</div>
 
   <progress id="overallProgress" value="0" max="100"></progress>
   <div id="directResult"></div>
 
-  <script src="/js/app.js"></script>
+  <hr>
+
+  <h2>Bucket Catalog</h2>
+  <form id="catalogForm" class="inline">
+    <input type="text" id="catalogPrefix" placeholder='Filter by prefix (e.g. "2025/09/04/")' />
+    <button type="submit">Load</button>
+  </form>
+  <div id="catalogMeta" class="note" style="margin:.4rem 0;"></div>
+
+  <table id="catalogTable">
+    <thead>
+      <tr>
+        <th style="width:55%;">Key</th>
+        <th style="width:10%; text-align:right;">Size</th>
+        <th style="width:20%;">Last Modified</th>
+        <th style="width:15%;">Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <button id="catalogMore" style="margin-top:.6rem; display:none;">Load more</button>
+
+  <!-- cache-bust so browsers don’t use an old app.js -->
+  <script src="/js/app.js?v=2025-09-04"></script>
 </body>
-<hr>
-<h2>Bucket Catalog</h2>
-
-<form id="catalogForm" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-  <input type="text" id="catalogPrefix" placeholder="Filter by prefix (e.g. 2025/09/04/)" style="min-width:320px;">
-  <button type="submit">Load</button>
-</form>
-
-<div id="catalogMeta" class="muted" style="margin:.5rem 0;"></div>
-
-<table id="catalogTable" border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
-  <thead>
-    <tr>
-      <th style="text-align:left;">Key</th>
-      <th style="text-align:right;">Size</th>
-      <th style="text-align:left;">Last Modified</th>
-      <th style="text-align:left;">Action</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
-
-<button id="catalogMore" style="margin-top:.5rem;display:none;">Load more</button>
 </html>
