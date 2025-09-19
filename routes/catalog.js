@@ -4,8 +4,11 @@ import 'dotenv/config';
 import {
   S3Client,
   ListObjectsV2Command,
-  HeadObjectCommand
+  HeadObjectCommand,
+  CopyObjectCommand,
+  DeleteObjectCommand
 } from '@aws-sdk/client-s3';
+
 
 const router = express.Router();
 
@@ -86,6 +89,74 @@ router.get('/item', async (req, res) => {
   } catch (err) {
     console.error('[catalog/item] error:', err);
     res.status(500).json({ error: 'failed to fetch item details' });
+  }
+});
+
+// POST /api/catalog/rename  { fromKey, newName }
+// Renames within the same prefix ("folder"). Preserves metadata and tags.
+router.post('/rename', express.json(), async (req, res) => {
+  try {
+    const { fromKey, newName } = req.body || {};
+    if (!fromKey || !newName) {
+      return res.status(400).json({ error: 'fromKey and newName are required' });
+    }
+
+    // basic validation: plain filename only
+    if (newName.includes('/') || newName.trim() === '') {
+      return res.status(400).json({ error: 'newName must be a plain filename (no slashes)' });
+    }
+
+    // keep same prefix as fromKey
+    const slash = fromKey.lastIndexOf('/');
+    const prefix = slash >= 0 ? fromKey.slice(0, slash + 1) : '';
+    const toKey = prefix + newName;
+
+    if (toKey === fromKey) {
+      return res.json({ ok: true, key: toKey, unchanged: true });
+    }
+
+    // ensure source exists
+    try {
+      await s3.send(new HeadObjectCommand({
+        Bucket: process.env.FILEBASE_BUCKET,
+        Key: fromKey
+      }));
+    } catch {
+      return res.status(404).json({ error: 'source not found' });
+    }
+
+    // prevent overwrite if destination exists
+    try {
+      await s3.send(new HeadObjectCommand({
+        Bucket: process.env.FILEBASE_BUCKET,
+        Key: toKey
+      }));
+      return res.status(409).json({ error: 'destination already exists' });
+    } catch {
+      // destination does not exist — proceed
+    }
+
+    // Copy (S3 "rename" = copy new key, then delete old)
+    const copySource = `/${process.env.FILEBASE_BUCKET}/${encodeURIComponent(fromKey)}`;
+    await s3.send(new CopyObjectCommand({
+      Bucket: process.env.FILEBASE_BUCKET,
+      Key: toKey,
+      CopySource: copySource,
+      MetadataDirective: 'COPY',
+      TaggingDirective: 'COPY'
+    }));
+
+    await s3.send(new DeleteObjectCommand({
+      Bucket: process.env.FILEBASE_BUCKET,
+      Key: fromKey
+    }));
+
+    // (Optional) write audit row here
+
+    return res.json({ ok: true, key: toKey });
+  } catch (err) {
+    console.error('[catalog/rename] error:', err);
+    return res.status(500).json({ error: 'rename failed' });
   }
 });
 
