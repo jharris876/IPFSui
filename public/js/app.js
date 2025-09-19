@@ -154,6 +154,7 @@ async function fetchList(prefix, token = null) {
       <td>${item.lastModified || ''}</td>
       <td>
         <button class="get-cid" data-key="${item.key}">Get CID</button>
+        <button class="rename-file" data-key="${item.key}" style="margin-left:.4rem;">Rename</button>
         <span class="cid-slot" style="margin-left:.5rem;color:#555"></span>
       </td>
     `;
@@ -214,6 +215,53 @@ document.addEventListener('click', async (e) => {
   } catch (err) {
     console.error(err);
     if (slot) slot.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Delegate "Rename"
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button.rename-file');
+  if (!btn) return;
+
+  const fromKey = btn.dataset.key;
+  const base = fromKey.split('/').pop();
+  const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
+  if (!newName || newName === base) return;
+
+  // very basic validation (server also validates)
+  if (newName.includes('/')) {
+    alert('New name must be a plain filename (no slashes).');
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/catalog/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromKey, newName })
+    });
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+    const { key: toKey } = await res.json();
+
+    // Update the row’s first cell (key) and both buttons’ data-key
+    const tr = btn.closest('tr');
+    if (tr) {
+      const keyCell = tr.querySelector('td');
+      if (keyCell) keyCell.textContent = toKey;
+      tr.querySelectorAll('button.get-cid, button.rename-file')
+        .forEach(b => b.dataset.key = toKey);
+      // clear any prior CID text (since key changed)
+      const slot = tr.querySelector('.cid-slot');
+      if (slot) slot.textContent = '';
+    }
+  } catch (err) {
+    alert(`Rename failed: ${err.message}`);
   } finally {
     btn.disabled = false;
   }
