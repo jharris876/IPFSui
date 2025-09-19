@@ -105,13 +105,13 @@ directForm?.addEventListener('submit', async (e) => {
     const { cid, url } = await completeRes.json();
 
     overallBar.value = 100;
-    const link = url ? `<a href="${url}" target="_blank" rel="noopener">${cid || url}</a>` : (cid || key);
-    directResult.innerHTML = `
-      <div><strong>Uploaded:</strong> ${file.name} (${humanBytes(file.size)})</div>
-      <div><strong>CID:</strong> ${cid || '(pending)'}</div>
-      <div><strong>Gateway:</strong> ${link}</div>
-      <div><strong>S3 Key:</strong> ${key}</div>
-    `;
+    
+    const msg = [];
+    msg.push(`<div><strong>Upload complete:</strong> ${file.name} (${humanBytes(file.size)})</div>`);
+    if (cid) msg.push(`<div><strong>CID:</strong> ${cid}</div>`);
+    if (url) msg.push(`<div><a href="${url}" target="_blank" rel="noopener">View on gateway</a></div>`);
+    directResult.innerHTML = msg.join('');
+
   } catch (err) {
     console.error(err);
     directResult.textContent = `Error: ${err.message}`;
