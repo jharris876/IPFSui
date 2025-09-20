@@ -137,7 +137,7 @@ router.post('/rename', express.json(), async (req, res) => {
     }
 
     // Copy (S3 "rename" = copy new key, then delete old)
-    const copySource = `/${process.env.FILEBASE_BUCKET}/${encodeURIComponent(fromKey)}`;
+    const copySource = `${process.env.FILEBASE_BUCKET}/${encodeURIComponent(fromKey)}`;
     await s3.send(new CopyObjectCommand({
       Bucket: process.env.FILEBASE_BUCKET,
       Key: toKey,

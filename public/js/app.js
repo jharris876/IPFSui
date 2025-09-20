@@ -12,6 +12,7 @@ const directFile     = document.getElementById('directFile');
 const uploadTokenEl  = document.getElementById('uploadToken');
 const overallBar     = document.getElementById('overallProgress');
 const directResult   = document.getElementById('directResult');
+const newFilenameEl  = document.getElementById('newFilename');
 
 directForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -24,6 +25,10 @@ directForm?.addEventListener('submit', async (e) => {
   overallBar.value = 0;
   overallBar.style.display = 'block';
 
+  // prefer the user-provided name if valid, else fallback to file.name
+  let desired = (newFilenameEl?.value || '').trim();
+  if(!desired || desired.includes('/')) desired = file.name;
+
   try {
     // 1) create multipart
     const createRes = await fetch('/api/multipart/create', {
@@ -32,8 +37,9 @@ directForm?.addEventListener('submit', async (e) => {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
+      
       body: JSON.stringify({
-        filename: file.name,
+        filename: desired,
         contentType: file.type || 'application/octet-stream',
         fileSize: file.size
       })
