@@ -5,6 +5,14 @@ function humanBytes(n) {
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return `${n.toFixed(1)} ${u[i]}`;
 }
+// New: ISO → "M/D/YYYY HH:MM:SS" in the user's local time
+function fmtDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d)) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()} ` +
+         `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 // ---------- direct-to-Filebase uploader ----------
 const directForm     = document.getElementById('directUploadForm');
@@ -153,15 +161,18 @@ async function fetchList(prefix, token = null) {
   if (!catalogTable) return;
 
   (data.items || []).forEach(item => {
+    const name = item.key.split('/').pop();               // filename only
+    const lm   = item.lastModified ? fmtDate(item.lastModified) : '';
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="word-break:break-all">${item.key}</td>
+      <td style="word-break:break-all" title="${item.key}">${name}</td>
       <td style="text-align:right;white-space:nowrap">${humanBytes(item.size)}</td>
-      <td>${item.lastModified || ''}</td>
-      <td>
+      <td>${lm}</td>
+      <td class="actions">
         <button class="get-cid" data-key="${item.key}">Get CID</button>
         <button class="rename-file" data-key="${item.key}" style="margin-left:.4rem;">Rename</button>
-        <span class="cid-slot" style="margin-left:.5rem;color:#555"></span>
+        <span class="cid-slot" style="margin-left:.5rem;color:#bbb"></span>
       </td>
     `;
     catalogTable.appendChild(tr);
