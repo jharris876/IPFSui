@@ -136,14 +136,15 @@ router.post('/rename', express.json(), async (req, res) => {
       // destination does not exist — proceed
     }
 
-    // Copy (S3 "rename" = copy new key, then delete old)
-    const copySource = `${process.env.FILEBASE_BUCKET}/${encodeURIComponent(fromKey)}`;
-    await s3.send(new CopyObjectCommand({
-      Bucket: process.env.FILEBASE_BUCKET,
-      Key: toKey,
-      CopySource: copySource,
-      MetadataDirective: 'COPY',
-      TaggingDirective: 'COPY'
+  // Copy (S3 "rename" = copy new key, then delete old)
+  // IMPORTANT: encode but keep slashes
+  const copySource = encodeURI(`${process.env.FILEBASE_BUCKET}/${fromKey}`);
+
+  await s3.send(new CopyObjectCommand({
+    Bucket: process.env.FILEBASE_BUCKET,
+    Key: toKey,
+    CopySource: copySource
+    // Do NOT set TaggingDirective/MetadataDirective; defaults are COPY
     }));
 
     await s3.send(new DeleteObjectCommand({
