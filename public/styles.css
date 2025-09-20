@@ -1,0 +1,147 @@
+:root{
+  --bg:#0b1020;
+  --panel:#131a2a;
+  --muted:#8aa0c9;
+  --text:#e8eeff;
+  --accent:#5aa9ff;
+  --accent-2:#66e0b6;
+  --danger:#ff6b6b;
+  --border:#1f2a40;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  color:var(--text);
+  background:linear-gradient(180deg,#0b1020 0%,#0e1426 100%);
+}
+
+/* layout */
+.container{
+  max-width:1100px;
+  margin:32px auto;
+  padding:0 20px;
+}
+.panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:10px;
+  box-shadow:0 8px 24px rgb(0 0 0 / 30%);
+  padding:18px 18px 12px;
+}
+
+h1,h2{
+  margin:0 0 14px;
+  letter-spacing:.2px;
+}
+h1{font-size:28px}
+h2{font-size:18px; color:var(--muted); font-weight:600}
+
+/* inputs/buttons */
+input[type="text"],input[type="password"],input[type="file"]{
+  background:#0e1527;
+  border:1px solid var(--border);
+  color:var(--text);
+  border-radius:8px;
+  padding:10px 12px;
+  outline:none;
+}
+input::placeholder{color:#6f87b9}
+input:focus{border-color:var(--accent)}
+
+button{
+  border:0;
+  border-radius:8px;
+  padding:10px 14px;
+  font-weight:600;
+  color:#041220;
+  cursor:pointer;
+  background:linear-gradient(180deg,var(--accent) 0%,#3f8fff 100%);
+  transition:transform .06s ease, filter .06s ease;
+}
+button:hover{filter:brightness(1.05)}
+button:active{transform:translateY(1px)}
+button.secondary{
+  background:linear-gradient(180deg,#3ad0a3 0%,var(--accent-2) 100%);
+}
+button.ghost{
+  background:#0e1527;
+  color:var(--text);
+  border:1px solid var(--border);
+}
+
+/* progress */
+progress{
+  width:100%;
+  height:10px;
+  appearance:none;
+  -webkit-appearance:none;
+  border:none;
+  background:#0e1527;
+  border-radius:6px;
+  overflow:hidden;
+  margin-top:10px;
+}
+progress::-webkit-progress-bar{
+  background:#0e1527;
+}
+progress::-webkit-progress-value{
+  background:linear-gradient(90deg,var(--accent) 0%,#3f8fff 100%);
+}
+progress::-moz-progress-bar{
+  background:linear-gradient(90deg,var(--accent) 0%,#3f8fff 100%);
+}
+
+/* results and notes */
+.note{color:var(--muted); font-size:12px}
+#directResult{margin-top:10px}
+
+/* table */
+.table-wrap{
+  margin-top:12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:auto;             /* makes the catalog scroll */
+  max-height:480px;          /* <-- adjust this to taste */
+  background:#0e1527;
+}
+
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  min-width:700px;
+}
+thead th{
+  position:sticky; top:0; z-index:2;
+  background:#0f1930;
+  color:var(--muted);
+  text-align:left;
+  font-weight:700;
+  font-size:12px;
+  letter-spacing:.6px;
+  text-transform:uppercase;
+  padding:12px 12px;
+  border-bottom:1px solid var(--border);
+}
+tbody td{
+  padding:12px 12px;
+  border-bottom:1px solid var(--border);
+  vertical-align:middle;
+}
+tbody tr:hover{background:#0f1930}
+td.actions{white-space:nowrap}
+
+/* pills/links */
+a{color:var(--accent)}
+.cid-pill{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#0b172e;
+  border:1px solid var(--border);
+  color:var(--muted);
+  font-size:12px;
+}
