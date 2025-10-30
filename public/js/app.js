@@ -190,9 +190,9 @@ async function fetchList(prefix, token = null) {
   if (!catalogTable) return;
 
   (data.items || []).forEach(item => {
-    const name = itemKeyOnly(item.key);        // <- call it
-    const size = humanBytes(item.size);        // <- call it
-    const mod  = niceDate(item.lastModified);  // <- call it
+    const name = itemKeyOnly(item.key);
+    const size = humanBytes(item.size);
+    const mod  = niceDate(item.lastModified);
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -212,7 +212,9 @@ async function fetchList(prefix, token = null) {
   if (catalogMore) catalogMore.style.display = nextToken ? 'inline-block' : 'none';
 
   const count = catalogTable.querySelectorAll('tr').length;
-  if (catalogMeta) catalogMeta.textContent = `Showing ${count} item(s)${prefix ? ` for prefix "${prefix}"` : ''}.`;
+  if (catalogMeta){ 
+    catalogMeta.textContent = `Showing ${count} item(s)${prefix ? ` for prefix "${prefix}"` : ''}.`;
+  }
 }
 
 catalogForm?.addEventListener('submit', async (e) => {
