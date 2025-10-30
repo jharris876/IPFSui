@@ -190,19 +190,19 @@ async function fetchList(prefix, token = null) {
   if (!catalogTable) return;
 
   (data.items || []).forEach(item => {
-    const name = item.key.split('/').pop();               // filename only
-    const lm   = item.lastModified ? fmtDate(item.lastModified) : '';
+    const name = itemKeyOnly(item.key);        // <- call it
+    const size = humanBytes(item.size);        // <- call it
+    const mod  = niceDate(item.lastModified);  // <- call it
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="word-break:break-all">${itemKeyOnly}</td>
-      <td class="uploader-cell" style="color:#9ca3af;">(fetching…)</td>
-      <td style="text-align:right;white-space:nowrap">${humanBytes(item.size)}</td>
-      <td>${niceDate}</td>
+      <td style="word-break:break-all">${name}</td>
+      <td style="text-align:right;white-space:nowrap">${size}</td>
+      <td>${mod}</td>
       <td>
         <button class="get-cid" data-key="${item.key}">Get CID</button>
         <button class="rename-file" data-key="${item.key}" style="margin-left:.4rem;">Rename</button>
-        <span class="cid-slot" style="margin-left:.5rem;color:#555"></span>
+        <span class="cid-slot" style="margin-left:.5rem;color:#bbb"></span>
       </td>
     `;
     catalogTable.appendChild(tr);
