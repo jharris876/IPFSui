@@ -5,6 +5,14 @@ function humanBytes(n) {
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return `${n.toFixed(1)} ${u[i]}`;
 }
+
+// turn "2025/09/05/image.png" -> "image.png"
+function itemKeyOnly(key) {
+  if (!key) return '';
+  const parts = key.split('/');
+  return parts[parts.length - 1];
+}
+
 // New: ISO → "M/D/YYYY HH:MM:SS" in the user's local time
 function fmtDate(iso) {
   const d = new Date(iso);
