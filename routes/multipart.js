@@ -56,22 +56,36 @@ function datedPrefix(d = new Date()) {
 router.post('/create', async (req, res) => {
   try {
     const { filename, contentType, fileSize } = req.body || {};
-    if (!filename) return res.status(400).json({ error: 'filename required' });
+    if (!filename) {
+      return res.status(400).json({ error: 'filename required' });
+    }
     if (!Number.isFinite(fileSize) || fileSize <= 0) {
       return res.status(400).json({ error: 'fileSize (bytes) required' });
     }
 
     const partSize = choosePartSize(Number(fileSize));
 
-    // Key layout: YYYY/MM/DD/<epoch>-<filename>
-    const key = `${datedPrefix()}/${Date.now()}-${filename}`;
+    // 1) take what the user sent
+    let clean = filename.trim();
+
+    // 2) EXTRA hardening: no slashes, no empty
+    if (!clean || clean === '.' || clean.includes('\\')) {
+      return res.status(400).json({ error: 'bad filename' });
+    }
+    // disallow `/` so we don’t get 2025/09/.. leaks from the client
+    if (clean.includes('/')) {
+      return res.status(400).json({ error: 'filename must not contain /' });
+    }
+
+    // 3) final key: JUST the name
+    // if later you want a fixed folder, do: const key = `uploads/${clean}`;
+    const key = clean;
 
     const createCmd = new CreateMultipartUploadCommand({
       Bucket: process.env.FILEBASE_BUCKET,
       Key: key,
       ContentType: contentType || 'application/octet-stream',
-      // You can add server-side metadata here if you want:
-      // Metadata: { caseId: '1234', cameraId: 'A1' }
+      // Metadata: {...}   // still available
     });
 
     const resp = await s3.send(createCmd);
