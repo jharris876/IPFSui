@@ -159,7 +159,7 @@ router.post('/rename', express.json(), async (req, res) => {
 
     // (Optional) write audit row here
 
-    return res.json({ ok: true, key: toKey });
+    return res.json({ key: toKey, lastModified: new Date().toISOString() });
   } catch (err) {
     console.error('[catalog/rename] error:', err);
     return res.status(500).json({ error: 'rename failed' });

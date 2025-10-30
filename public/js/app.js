@@ -313,7 +313,7 @@ document.addEventListener('click', async (e) => {
       const msg = await res.text();
       throw new Error(msg || `HTTP ${res.status}`);
     }
-    const { key: toKey } = await res.json();
+    const { key: toKey, lastModified } = await res.json();
 
     // Update the row’s first cell (key) and both buttons’ data-key
     const tr = btn.closest('tr');
