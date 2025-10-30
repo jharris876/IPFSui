@@ -319,7 +319,7 @@ document.addEventListener('click', async (e) => {
     const tr = btn.closest('tr');
     if (tr) {
       const keyCell = tr.querySelector('td');
-      if (keyCell) keyCell.textContent = toKey;
+      if (keyCell) keyCell.textContent = itemKeyOnly(toKey);
       tr.querySelectorAll('button.get-cid, button.rename-file')
         .forEach(b => b.dataset.key = toKey);
       // clear any prior CID text (since key changed)
