@@ -155,6 +155,12 @@ directForm?.addEventListener('submit', async (e) => {
     if (url) msg.push(`<div><a href="${url}" target="_blank" rel="noopener">View on gateway</a></div>`);
     directResult.innerHTML = msg.join('');
 
+    if (typeof catalogForm !== 'undefined' && catalogForm) {
+      if (catalogTable) catalogTable.innerHTML = '';
+      nextToken = null;
+      catalogForm.dispatchEvent(new Event('submit'));
+    }
+
   } catch (err) {
     console.error(err);
     directResult.textContent = `Error: ${err.message}`;

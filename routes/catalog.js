@@ -106,17 +106,19 @@ router.post('/rename', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'fromKey and newName are required' });
     }
 
-    // only allow plain filename
     if (newName.includes('/') || newName.trim() === '') {
       return res.status(400).json({ error: 'newName must be a plain filename (no slashes)' });
     }
 
-    // keep the SAME folder/prefix
     const slash = fromKey.lastIndexOf('/');
     const prefix = slash >= 0 ? fromKey.slice(0, slash + 1) : '';
-    const toKey = prefix + newName;
 
-    // no-op
+    // detect auto/date/random prefixes
+    const looksAuto = /^(\d{4}\/\d{2}\/\d{2}\/|[0-9a-fA-F-]{10,}\/)$/.test(prefix);
+
+    // if it's auto → drop it, otherwise keep it
+    const toKey = looksAuto ? newName : (prefix + newName);
+
     if (toKey === fromKey) {
       return res.json({
         ok: true,
@@ -128,49 +130,44 @@ router.post('/rename', express.json(), async (req, res) => {
 
     const bucket = process.env.FILEBASE_BUCKET;
 
-    // 1) make sure source exists
+    // make sure source exists
     try {
       await s3.send(new HeadObjectCommand({
         Bucket: bucket,
         Key: fromKey
       }));
-    } catch (err) {
+    } catch {
       return res.status(404).json({ error: 'source not found' });
     }
 
-    // 2) prevent overwrite
+    // prevent overwrite
     try {
       await s3.send(new HeadObjectCommand({
         Bucket: bucket,
         Key: toKey
       }));
       return res.status(409).json({ error: 'destination already exists' });
-    } catch (err) {
-      // ok, destination doesn't exist
+    } catch {
+      // ok, dest does not exist
     }
 
-    // 3) COPY → this is the important line
     const copySource = `/${bucket}/${encodeURI(fromKey)}`;
 
     await s3.send(new CopyObjectCommand({
       Bucket: bucket,
       Key: toKey,
-      CopySource: copySource,
-      // default is COPY metadata/tags, so we can leave it
+      CopySource: copySource
     }));
 
-    // 4) DELETE old
     await s3.send(new DeleteObjectCommand({
       Bucket: bucket,
       Key: fromKey
     }));
 
-    // 5) respond with new key and a timestamp for the UI
     return res.json({
       key: toKey,
       lastModified: new Date().toISOString()
     });
-
   } catch (err) {
     console.error('[catalog/rename] error:', err);
     return res.status(500).json({ error: 'rename failed' });
