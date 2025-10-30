@@ -123,39 +123,44 @@ router.get('/sign', async (req, res) => {
  */
 router.post('/complete', async (req, res) => {
   try {
-    const { key, uploadId, parts } = req.body || {};
+    const { key, uploadId, parts, uploader } = req.body || {};
     if (!key || !uploadId || !Array.isArray(parts) || parts.length === 0) {
-      return res.status(400).json({ error: 'key, uploadId, and parts[] required' });
+      return res.status(400).json({ error: 'key, uploadId and parts are required' });
     }
 
-    // Ensure numeric PartNumber and ETag strings
-    const Parts = parts.map(p => ({
-      ETag: String(p.ETag),
-      PartNumber: Number(p.PartNumber),
-    }));
+    // use provided uploader, or env default, or fallback
+    const finalUploader =
+      uploader ||
+      process.env.DEFAULT_UPLOADER ||
+      'system';
 
-    const completeCmd = new CompleteMultipartUploadCommand({
+    const out = await s3.send(new CompleteMultipartUploadCommand({
       Bucket: process.env.FILEBASE_BUCKET,
       Key: key,
       UploadId: uploadId,
-      MultipartUpload: { Parts },
+      MultipartUpload: {
+        Parts: parts.map(p => ({
+          ETag: p.ETag,
+          PartNumber: p.PartNumber
+        }))
+      },
+      // Filebase lets us keep metadata on complete
+      Metadata: {
+        uploader: finalUploader
+      }
+}));
+
+//Complete error handler
+const cid = out?.$metadata?.httpHeaders?.['x-amz-meta-cid'] || null;
+
+return res.json({
+      key,
+      cid,
+      uploader: finalUploader
     });
-
-    await s3.send(completeCmd);
-
-    // After completion, Filebase exposes the IPFS CID via head metadata/headers
-    const head = await s3.send(
-      new HeadObjectCommand({ Bucket: process.env.FILEBASE_BUCKET, Key: key })
-    );
-    const cid = head.Metadata?.cid || head?.$metadata?.httpHeaders?.['x-amz-meta-cid'];
-
-    const gw = (process.env.FILEBASE_GATEWAY_URL || 'https://ipfs.filebase.io').replace(/\/+$/, '');
-    const url = cid ? `${gw}/ipfs/${cid}` : null;
-
-    return res.json({ key, cid, url });
   } catch (err) {
     console.error('[multipart/complete] error:', err);
-    return res.status(500).json({ error: 'failed to complete multipart upload' });
+    return res.status(500).json({ error: 'complete failed' });
   }
 });
 

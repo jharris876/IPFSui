@@ -68,10 +68,14 @@ router.get('/item', async (req, res) => {
       Key: key,
     }));
 
-    // Filebase exposes CID via metadata header
     const cid =
       head.Metadata?.cid ||
       head?.$metadata?.httpHeaders?.['x-amz-meta-cid'] ||
+      null;
+
+    const uploader =
+      head.Metadata?.uploader ||
+      head?.$metadata?.httpHeaders?.['x-amz-meta-uploader'] ||
       null;
 
     const gw = (process.env.FILEBASE_GATEWAY_URL || 'https://ipfs.filebase.io')
@@ -83,6 +87,7 @@ router.get('/item', async (req, res) => {
       key,
       cid,
       url,
+      uploader,
       contentType: head.ContentType || null,
       size: head.ContentLength || null,
     });

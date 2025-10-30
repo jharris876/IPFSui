@@ -113,8 +113,15 @@ directForm?.addEventListener('submit', async (e) => {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ key, uploadId, parts })
+      body: JSON.stringify({ 
+        key,
+        uploadId,
+        parts,
+        //temp: use the token field as who uploaded
+        uploader: (uploadTokenEl.value || '').trim() || 'web-user'
+      })
     });
+
     if (!completeRes.ok) throw new Error(`complete failed: ${await completeRes.text()}`);
     const { cid, url } = await completeRes.json();
 
@@ -166,13 +173,14 @@ async function fetchList(prefix, token = null) {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="word-break:break-all" title="${item.key}">${name}</td>
+      <td style="word-break:break-all">${itemKeyOnly}</td>
+      <td class="uploader-cell" style="color:#9ca3af;">(fetching…)</td>
       <td style="text-align:right;white-space:nowrap">${humanBytes(item.size)}</td>
-      <td>${lm}</td>
-      <td class="actions">
+      <td>${niceDate}</td>
+      <td>
         <button class="get-cid" data-key="${item.key}">Get CID</button>
         <button class="rename-file" data-key="${item.key}" style="margin-left:.4rem;">Rename</button>
-        <span class="cid-slot" style="margin-left:.5rem;color:#bbb"></span>
+        <span class="cid-slot" style="margin-left:.5rem;color:#555"></span>
       </td>
     `;
     catalogTable.appendChild(tr);
@@ -214,6 +222,7 @@ document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button.get-cid');
   if (!btn) return;
   btn.disabled = true;
+
   const key = btn.dataset.key;
   const slot = btn.parentElement.querySelector('.cid-slot');
   if (slot) slot.textContent = '…';
@@ -223,11 +232,27 @@ document.addEventListener('click', async (e) => {
     url.searchParams.set('key', key);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`item failed: ${await res.text()}`);
-    const { cid, url: gw } = await res.json();
+
+    const { cid, url: gw, uploader } = await res.json();
+
+    // 1) show CID / link like before
     if (slot) {
-      if (gw) slot.innerHTML = `<a href="${gw}" target="_blank" rel="noopener">${cid || 'open'}</a>`;
-      else if (cid) slot.textContent = cid;
-      else slot.textContent = 'CID not available yet';
+      if (gw) {
+        slot.innerHTML = `<a href="${gw}" target="_blank" rel="noopener">${cid || 'open'}</a>`;
+      } else if (cid) {
+        slot.textContent = cid;
+      } else {
+        slot.textContent = 'CID not available yet';
+      }
+    }
+
+    // 2) update uploader cell in the same row
+    const row = btn.closest('tr');
+    if (row) {
+      const upCell = row.querySelector('.uploader-cell');
+      if (upCell) {
+        upCell.textContent = uploader || '(unknown)';
+      }
     }
   } catch (err) {
     console.error(err);
