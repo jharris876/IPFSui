@@ -13,6 +13,20 @@ function itemKeyOnly(key) {
   return parts[parts.length - 1];
 }
 
+// "2025-09-04T22:44:21.000Z" -> "9/4/2025 22:44:21"
+function niceDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso; // fallback
+  const mm = d.getMonth() + 1;
+  const dd = d.getDate();
+  const yyyy = d.getFullYear();
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mi = d.getMinutes().toString().padStart(2, '0');
+  const ss = d.getSeconds().toString().padStart(2, '0');
+  return `${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`;
+}
+
 // New: ISO → "M/D/YYYY HH:MM:SS" in the user's local time
 function fmtDate(iso) {
   const d = new Date(iso);
