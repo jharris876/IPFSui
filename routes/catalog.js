@@ -106,60 +106,71 @@ router.post('/rename', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'fromKey and newName are required' });
     }
 
-    // basic validation: plain filename only
+    // only allow plain filename
     if (newName.includes('/') || newName.trim() === '') {
       return res.status(400).json({ error: 'newName must be a plain filename (no slashes)' });
     }
 
-    // keep same prefix as fromKey
+    // keep the SAME folder/prefix
     const slash = fromKey.lastIndexOf('/');
     const prefix = slash >= 0 ? fromKey.slice(0, slash + 1) : '';
     const toKey = prefix + newName;
 
+    // no-op
     if (toKey === fromKey) {
-      return res.json({ ok: true, key: toKey, unchanged: true });
+      return res.json({
+        ok: true,
+        key: toKey,
+        unchanged: true,
+        lastModified: new Date().toISOString()
+      });
     }
 
-    // ensure source exists
+    const bucket = process.env.FILEBASE_BUCKET;
+
+    // 1) make sure source exists
     try {
       await s3.send(new HeadObjectCommand({
-        Bucket: process.env.FILEBASE_BUCKET,
+        Bucket: bucket,
         Key: fromKey
       }));
-    } catch {
+    } catch (err) {
       return res.status(404).json({ error: 'source not found' });
     }
 
-    // prevent overwrite if destination exists
+    // 2) prevent overwrite
     try {
       await s3.send(new HeadObjectCommand({
-        Bucket: process.env.FILEBASE_BUCKET,
+        Bucket: bucket,
         Key: toKey
       }));
       return res.status(409).json({ error: 'destination already exists' });
-    } catch {
-      // destination does not exist — proceed
+    } catch (err) {
+      // ok, destination doesn't exist
     }
 
-  // Copy (S3 "rename" = copy new key, then delete old)
-  // IMPORTANT: encode but keep slashes
-  const copySource = encodeURI(`${process.env.FILEBASE_BUCKET}/${fromKey}`);
+    // 3) COPY → this is the important line
+    const copySource = `/${bucket}/${encodeURI(fromKey)}`;
 
-  await s3.send(new CopyObjectCommand({
-    Bucket: process.env.FILEBASE_BUCKET,
-    Key: toKey,
-    CopySource: copySource
-    // Do NOT set TaggingDirective/MetadataDirective; defaults are COPY
+    await s3.send(new CopyObjectCommand({
+      Bucket: bucket,
+      Key: toKey,
+      CopySource: copySource,
+      // default is COPY metadata/tags, so we can leave it
     }));
 
+    // 4) DELETE old
     await s3.send(new DeleteObjectCommand({
-      Bucket: process.env.FILEBASE_BUCKET,
+      Bucket: bucket,
       Key: fromKey
     }));
 
-    // (Optional) write audit row here
+    // 5) respond with new key and a timestamp for the UI
+    return res.json({
+      key: toKey,
+      lastModified: new Date().toISOString()
+    });
 
-    return res.json({ key: toKey, lastModified: new Date().toISOString() });
   } catch (err) {
     console.error('[catalog/rename] error:', err);
     return res.status(500).json({ error: 'rename failed' });

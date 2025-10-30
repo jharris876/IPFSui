@@ -296,7 +296,7 @@ document.addEventListener('click', async (e) => {
   const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
   if (!newName || newName === base) return;
 
-  // very basic validation (server also validates)
+  // basic validation
   if (newName.includes('/')) {
     alert('New name must be a plain filename (no slashes).');
     return;
@@ -313,16 +313,32 @@ document.addEventListener('click', async (e) => {
       const msg = await res.text();
       throw new Error(msg || `HTTP ${res.status}`);
     }
-    const { key: toKey, lastModified } = await res.json();
 
-    // Update the row’s first cell (key) and both buttons’ data-key
+    // 👇 we EXPECT the server to send { key, lastModified }
+    const payload = await res.json();
+    console.log('[rename response]', payload);
+
+    const toKey = payload.key;
+    // fallback to *right now* if server didn't send lastModified
+    const lmIso = payload.lastModified || new Date().toISOString();
+
     const tr = btn.closest('tr');
     if (tr) {
+      // col 0 = name/key
       const keyCell = tr.querySelector('td');
       if (keyCell) keyCell.textContent = itemKeyOnly(toKey);
+
+      // update buttons to new key
       tr.querySelectorAll('button.get-cid, button.rename-file')
         .forEach(b => b.dataset.key = toKey);
-      // clear any prior CID text (since key changed)
+
+      // col 2 = last modified
+      const dateCell = tr.children[2];
+      if (dateCell) {
+        dateCell.textContent = niceDate(lmIso);
+      }
+
+      // clear CID slot
       const slot = tr.querySelector('.cid-slot');
       if (slot) slot.textContent = '';
     }
