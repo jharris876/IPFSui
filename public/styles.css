@@ -94,6 +94,34 @@ progress::-moz-progress-bar{
   background:linear-gradient(90deg,var(--accent) 0%,#3f8fff 100%);
 }
 
+#catalogTable th:nth-child(1),
+#catalogTable td:nth-child(1) {
+  width: 40%;
+}
+
+#catalogTable th:nth-child(2),
+#catalogTable td:nth-child(2) {
+  width: 15%;
+}
+
+#catalogTable th:nth-child(3),
+#catalogTable td:nth-child(3) {
+  width: 10%;
+  text-align: right;
+}
+
+#catalogTable th:nth-child(4),
+#catalogTable td:nth-child(4) {
+  width: 20%;
+  text-align: right;
+}
+
+#catalogTable th:nth-child(5),
+#catalogTable td:nth-child(5) {
+  width: 15%;
+  text-align: right;
+}
+
 /* results and notes */
 .note{color:var(--muted); font-size:12px}
 #directResult{margin-top:10px}

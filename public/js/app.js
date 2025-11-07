@@ -316,10 +316,10 @@ async function fetchList(prefix, token = null) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="word-break:break-all">${name}</td>
-      <td class="uploader-cell" style="color:#9ca3af;">(fetching…)</td>
-      <td style="text-align:right;white-space:nowrap">${size}</td>
-      <td>${mod}</td>
-      <td>
+      <td class="uploader-cell">(unknown)</td>
+      <td class="size-cell" style="text-align:right;white-space:nowrap">${humanBytes(item.size)}</td>
+      <td class="date-cell">${niceDate(item.lastModified)}</td>
+      <td class="action-cell">
         <button class="view-file" data-key="${item.key}">View</button>
       </td>
     `;
@@ -475,7 +475,17 @@ document.addEventListener('click', async (e) => {
   const key = btn.dataset.key;
   if (!key) return;
 
+  // Pull values from the table row first (DOM is always up-to-date)
+  const tr = btn.closest('tr');
+  const uploaderFromRow =
+    tr?.querySelector('.uploader-cell')?.textContent?.trim() || '';
+  const sizeFromRow =
+    tr?.querySelector('.size-cell')?.textContent?.trim() || '';
+  const dateFromRow =
+    tr?.querySelector('.date-cell')?.textContent?.trim() || '';
+
   openDetailModal();
+  // If loadDetailsForKey sets default text, keep it; we'll override below.
   await loadDetailsForKey(key);
 
   try {
@@ -496,11 +506,19 @@ document.addEventListener('click', async (e) => {
     const item = await itemRes.json();
     const history = await histRes.json();
 
-    const gwLink = item.url ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>` : '(no CID yet)';
-    const uploadedBy = item.uploader || '(unknown)';
-    const sizeStr = item.size != null ? humanBytes(item.size) : '(unknown)';
-    const lmStr   = item.lastModified ? niceDate(item.lastModified) : '(unknown)';
+    const gwLink = item.url
+      ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>`
+      : '(no CID yet)';
 
+    // Prefer values from the row; fall back to API if needed
+    const uploadedBy =
+      uploaderFromRow || item.uploader || '(unknown)';
+    const sizeStr =
+      sizeFromRow || (item.size != null ? humanBytes(item.size) : '(unknown)');
+    const lmStr =
+      dateFromRow || (item.lastModified ? niceDate(item.lastModified) : '(unknown)');
+
+    // === FULL history list (you already had this right, just keeping it) ===
     let historyHtml = '';
     const events = Array.isArray(history.events) ? history.events : [];
     if (!events.length) {
