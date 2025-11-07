@@ -9,7 +9,9 @@ import {
   AbortMultipartUploadCommand,
   HeadObjectCommand
 } from '@aws-sdk/client-s3';
+
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { writeAudit } from '../lib/audit.js'; 
 
 const router = express.Router();
 
@@ -137,44 +139,51 @@ router.get('/sign', async (req, res) => {
  */
 router.post('/complete', async (req, res) => {
   try {
-    const { key, uploadId, parts, uploader } = req.body || {};
+    const { key, uploadId, parts } = req.body || {};
     if (!key || !uploadId || !Array.isArray(parts) || parts.length === 0) {
       return res.status(400).json({ error: 'key, uploadId and parts are required' });
     }
 
-    // use provided uploader, or env default, or fallback
-    const finalUploader =
-      uploader ||
-      process.env.DEFAULT_UPLOADER ||
-      'system';
+    // 1) did something already exist at this key?
+    let existed = false;
+    try {
+      await s3.send(new HeadObjectCommand({
+        Bucket: process.env.FILEBASE_BUCKET,
+        Key: key,
+      }));
+      existed = true;
+    } catch {
+      existed = false;
+    }
 
+    // 2) complete multipart
     const out = await s3.send(new CompleteMultipartUploadCommand({
       Bucket: process.env.FILEBASE_BUCKET,
       Key: key,
       UploadId: uploadId,
-      MultipartUpload: {
-        Parts: parts.map(p => ({
-          ETag: p.ETag,
-          PartNumber: p.PartNumber
-        }))
-      },
-      // Filebase lets us keep metadata on complete
-      Metadata: {
-        uploader: finalUploader
-      }
-}));
+      MultipartUpload: { Parts: parts }
+    }));
 
-//Complete error handler
-const cid = out?.$metadata?.httpHeaders?.['x-amz-meta-cid'] || null;
+    // If you already compute CID/gateway here, keep that logic.
+    // I’ll assume you have something like this already:
+    const location = out.Location || null;
+    const cid      = out.ETag ? out.ETag.replace(/"/g, '') : null; // or your real CID logic
+    const gw       = (process.env.FILEBASE_GATEWAY_URL || 'https://ipfs.filebase.io')
+      .replace(/\/+$/, '');
+    const url      = cid ? `${gw}/ipfs/${cid}` : location;
 
-return res.json({
+    // 3) write audit record
+    writeAudit({
+      action: existed ? 'replace' : 'upload',
       key,
-      cid,
-      uploader: finalUploader
+      user: 'unknown',             // will be real user later
+      meta: { parts: parts.length }
     });
+
+    return res.json({ key, cid, url });
   } catch (err) {
     console.error('[multipart/complete] error:', err);
-    return res.status(500).json({ error: 'complete failed' });
+    return res.status(500).json({ error: 'failed to complete multipart upload' });
   }
 });
 

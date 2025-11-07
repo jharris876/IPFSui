@@ -9,6 +9,7 @@ import {
   DeleteObjectCommand
 } from '@aws-sdk/client-s3';
 
+import { writeAudit, readAuditForKey } from '../lib/audit.js';
 
 const router = express.Router();
 
@@ -97,6 +98,27 @@ router.get('/item', async (req, res) => {
   }
 });
 
+// GET /api/catalog/history?key=...
+// Returns audit history for a single key.
+router.get('/history', async (req, res) => {
+  try {
+    const key = (req.query.key || '').toString();
+    if (!key) {
+      return res.status(400).json({ error: 'key required' });
+    }
+
+    const events = readAuditForKey(key);
+
+    return res.json({
+      key,
+      events
+    });
+  } catch (err) {
+    console.error('[catalog/history] error:', err);
+    return res.status(500).json({ error: 'failed to read history' });
+  }
+});
+
 // POST /api/catalog/rename  { fromKey, newName }
 // Renames within the same prefix ("folder"). Preserves metadata and tags.
 router.post('/rename', express.json(), async (req, res) => {
@@ -163,6 +185,13 @@ router.post('/rename', express.json(), async (req, res) => {
       Bucket: bucket,
       Key: fromKey
     }));
+
+    writeAudit({
+      action: 'rename',
+      key: toKey,       // new key
+      fromKey,          // old key
+      user: 'unknown'   // will be real user later
+    });
 
     return res.json({
       key: toKey,
