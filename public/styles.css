@@ -222,3 +222,15 @@ a{color:var(--accent)}
 .history-list li:last-child {
   border-bottom: none;
 }
+.pill-button {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  border: none;
+  font-size: 0.8rem;
+  cursor: pointer;
+  background: #3b82f6;
+  color: #f9fafb;
+}
+.pill-button:hover {
+  background: #2563eb;
+}

@@ -184,6 +184,7 @@ const detailOverlay = document.getElementById('detailOverlay');
 const detailTitle   = document.getElementById('detailTitle');
 const detailBody    = document.getElementById('detailBody');
 const detailClose   = document.getElementById('detailClose');
+const detailRename  = document.getElementById('detailRename');
 
 //For view button
 function openDetailModal() {
@@ -200,6 +201,100 @@ detailOverlay?.addEventListener('click', (e) => {
 //end view button
 let nextToken = null;
 let currentPrefix = '';
+let detailCurrentKey = null;
+
+async function loadDetailsForKey(key) {
+  detailCurrentKey = key;
+
+  if (detailTitle) detailTitle.textContent = itemKeyOnly(key) || key;
+  if (detailBody) detailBody.textContent = 'Loading…';
+
+  try {
+    const itemUrl = new URL('/api/catalog/item', window.location.origin);
+    itemUrl.searchParams.set('key', key);
+
+    const histUrl = new URL('/api/catalog/history', window.location.origin);
+    histUrl.searchParams.set('key', key);
+
+    const [itemRes, histRes] = await Promise.all([
+      fetch(itemUrl),
+      fetch(histUrl)
+    ]);
+
+    if (!itemRes.ok) throw new Error(`item failed: ${await itemRes.text()}`);
+    if (!histRes.ok) throw new Error(`history failed: ${await histRes.text()}`);
+
+    const item = await itemRes.json();
+    const history = await histRes.json();
+
+    const gwLink = item.url
+      ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>`
+      : '(no CID yet)';
+    const uploadedBy = item.uploader || '(unknown)';
+    const sizeStr = item.size != null ? humanBytes(item.size) : '(unknown)';
+    const lmStr   = item.lastModified ? niceDate(item.lastModified) : '(unknown)';
+
+    let historyHtml = '';
+    const events = Array.isArray(history.events) ? history.events : [];
+    if (!events.length) {
+      historyHtml = '<p style="color:#9ca3af;">No history recorded yet.</p>';
+    } else {
+      historyHtml = '<div class="history-list"><ul>';
+      for (const ev of events) {
+        const when = ev.ts ? niceDate(ev.ts) : '(unknown time)';
+        let desc = ev.action || 'event';
+
+        if (ev.action === 'upload') {
+          desc = 'Uploaded';
+        } else if (ev.action === 'replace') {
+          desc = 'Re-uploaded (replaced existing file)';
+        } else if (ev.action === 'rename') {
+          desc = ev.fromKey
+            ? `Renamed from "${ev.fromKey}" to "${ev.key}"`
+            : `Renamed to "${ev.key}"`;
+        } else if (ev.action === 'delete') {
+          desc = 'Deleted';
+        }
+
+        const who = ev.user || 'unknown';
+        historyHtml += `<li><strong>${when}</strong> – ${desc} by <span style="color:#9ca3af;">${who}</span></li>`;
+      }
+      historyHtml += '</ul></div>';
+    }
+
+    if (detailBody) {
+      detailBody.innerHTML = `
+        <dl>
+          <dt>Current name</dt>
+          <dd>${itemKeyOnly(item.key) || item.key}</dd>
+
+          <dt>Full key</dt>
+          <dd>${item.key}</dd>
+
+          <dt>Uploader</dt>
+          <dd>${uploadedBy}</dd>
+
+          <dt>Size</dt>
+          <dd>${sizeStr}</dd>
+
+          <dt>Last modified</dt>
+          <dd>${lmStr}</dd>
+
+          <dt>CID / Gateway</dt>
+          <dd>${gwLink}</dd>
+        </dl>
+
+        <h3 style="font-size:0.9rem;margin:0.5rem 0;">Change history</h3>
+        ${historyHtml}
+      `;
+    }
+  } catch (err) {
+    console.error(err);
+    if (detailBody) {
+      detailBody.innerHTML = `<p style="color:#fca5a5;">Error: ${err.message}</p>`;
+    }
+  }
+}
 
 async function fetchList(prefix, token = null) {
   const url = new URL('/api/catalog/list', window.location.origin);
@@ -221,7 +316,7 @@ async function fetchList(prefix, token = null) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="word-break:break-all">${name}</td>
-      td class="uploader-cell" style="color:#9ca3af;">(fetching…)</td>
+      <td class="uploader-cell" style="color:#9ca3af;">(fetching…)</td>
       <td style="text-align:right;white-space:nowrap">${size}</td>
       <td>${mod}</td>
       <td>
@@ -381,8 +476,7 @@ document.addEventListener('click', async (e) => {
   if (!key) return;
 
   openDetailModal();
-  if (detailTitle) detailTitle.textContent = itemKeyOnly(key) || key;
-  if (detailBody) detailBody.textContent = 'Loading…';
+  await loadDetailsForKey(key);
 
   try {
     const itemUrl = new URL('/api/catalog/item', window.location.origin);
@@ -466,6 +560,44 @@ document.addEventListener('click', async (e) => {
     if (detailBody) {
       detailBody.innerHTML = `<p style="color:#fca5a5;">Error: ${err.message}</p>`;
     }
+  }
+});
+
+//Rename logic for modal
+detailRename?.addEventListener('click', async () => {
+  if (!detailCurrentKey) return;
+
+  const base = itemKeyOnly(detailCurrentKey) || detailCurrentKey;
+  const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
+  if (!newName || newName === base) return;
+
+  if (newName.includes('/')) {
+    alert('New name must be a plain filename (no slashes).');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/catalog/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromKey: detailCurrentKey, newName })
+    });
+
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+
+    const { key: toKey } = await res.json();
+    detailCurrentKey = toKey;
+
+    // Reload modal details for the new key
+    await loadDetailsForKey(toKey);
+
+    // Refresh table so the row shows new name + modified date
+    catalogForm?.dispatchEvent(new Event('submit'));
+  } catch (err) {
+    alert(`Rename failed: ${err.message}`);
   }
 });
 

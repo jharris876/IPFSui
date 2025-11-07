@@ -84,11 +84,16 @@ router.get('/item', async (req, res) => {
 
     const url = cid ? `${gw}/ipfs/${cid}` : null;
 
+    const lastModified = head.LastModified
+      ? new Date(head.LastModified).toISOString()
+      : null;
+
     res.json({
       key,
       cid,
       url,
       uploader,
+      lastModified,
       contentType: head.ContentType || null,
       size: head.ContentLength || null,
     });
