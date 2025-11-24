@@ -64,10 +64,16 @@ router.get('/item', async (req, res) => {
     const key = (req.query.key || '').toString();
     if (!key) return res.status(400).json({ error: 'key required' });
 
-    const head = await s3.send(new HeadObjectCommand({
-      Bucket: process.env.FILEBASE_BUCKET,
-      Key: key,
-    }));
+    let head;
+    try {
+      head = await s3.send(new HeadObjectCommand({
+        Bucket: process.env.FILEBASE_BUCKET,
+        Key: key,
+      }));
+    } catch (e) {
+      // clean 404 (don’t mask as 500)
+      return res.status(404).json({ error: 'not found' });
+    }
 
     const cid =
       head.Metadata?.cid ||

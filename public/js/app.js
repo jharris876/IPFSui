@@ -469,116 +469,108 @@ document.addEventListener('click', async (e) => {
 
 //Delegate "View"
 document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button.view-file');
+    const btn = e.target.closest('button.view-file');
   if (!btn) return;
 
-  const key = btn.dataset.key;
-  if (!key) return;
+  // helper so we can retry with a different key
+  const showForKey = async (key, updateRowIfChanged = false) => {
+    openDetailModal();
+    if (detailBody) detailBody.innerHTML = '<p style="color:#9ca3af;">Loading…</p>';
 
-  // Pull values from the table row first (DOM is always up-to-date)
-  const tr = btn.closest('tr');
-  const uploaderFromRow =
-    tr?.querySelector('.uploader-cell')?.textContent?.trim() || '';
-  const sizeFromRow =
-    tr?.querySelector('.size-cell')?.textContent?.trim() || '';
-  const dateFromRow =
-    tr?.querySelector('.date-cell')?.textContent?.trim() || '';
+    try {
+      // fetch item + history in parallel
+      const itemUrl = new URL('/api/catalog/item', window.location.origin);
+      itemUrl.searchParams.set('key', key);
 
-  openDetailModal();
-  // If loadDetailsForKey sets default text, keep it; we'll override below.
-  await loadDetailsForKey(key);
+      const histUrl = new URL('/api/catalog/history', window.location.origin);
+      histUrl.searchParams.set('key', key);
 
-  try {
-    const itemUrl = new URL('/api/catalog/item', window.location.origin);
-    itemUrl.searchParams.set('key', key);
+      const [itemRes, histRes] = await Promise.all([ fetch(itemUrl), fetch(histUrl) ]);
 
-    const histUrl = new URL('/api/catalog/history', window.location.origin);
-    histUrl.searchParams.set('key', key);
-
-    const [itemRes, histRes] = await Promise.all([
-      fetch(itemUrl),
-      fetch(histUrl)
-    ]);
-
-    if (!itemRes.ok) throw new Error(`item failed: ${await itemRes.text()}`);
-    if (!histRes.ok) throw new Error(`history failed: ${await histRes.text()}`);
-
-    const item = await itemRes.json();
-    const history = await histRes.json();
-
-    const gwLink = item.url
-      ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>`
-      : '(no CID yet)';
-
-    // Prefer values from the row; fall back to API if needed
-    const uploadedBy =
-      uploaderFromRow || item.uploader || '(unknown)';
-    const sizeStr =
-      sizeFromRow || (item.size != null ? humanBytes(item.size) : '(unknown)');
-    const lmStr =
-      dateFromRow || (item.lastModified ? niceDate(item.lastModified) : '(unknown)');
-
-    // === FULL history list (you already had this right, just keeping it) ===
-    let historyHtml = '';
-    const events = Array.isArray(history.events) ? history.events : [];
-    if (!events.length) {
-      historyHtml = '<p style="color:#9ca3af;">No history recorded yet.</p>';
-    } else {
-      historyHtml = '<div class="history-list"><ul>';
-      for (const ev of events) {
-        const when = ev.ts ? niceDate(ev.ts) : '(unknown time)';
-        let desc = ev.action || 'event';
-
-        if (ev.action === 'upload') {
-          desc = 'Uploaded';
-        } else if (ev.action === 'replace') {
-          desc = 'Re-uploaded (replaced existing file)';
-        } else if (ev.action === 'rename') {
-          desc = ev.fromKey
-            ? `Renamed from "${ev.fromKey}" to "${ev.key}"`
-            : `Renamed to "${ev.key}"`;
-        } else if (ev.action === 'delete') {
-          desc = 'Deleted';
+      // If the key no longer exists (someone renamed it), try to discover the new key
+      if (itemRes.status === 404) {
+        const histJson = await histRes.json().catch(() => ({ events: [] }));
+        const events = Array.isArray(histJson.events) ? histJson.events : [];
+        const lastRename = events.find(ev => ev.action === 'rename' && ev.key && ev.ts); // events are newest-first from our API
+        if (lastRename && lastRename.key && lastRename.key !== key) {
+          // optionally fix the row so future clicks use the new key
+          if (updateRowIfChanged) {
+            const tr = btn.closest('tr');
+            if (tr) {
+              const keyCell = tr.querySelector('td');
+              if (keyCell) keyCell.textContent = lastRename.key;
+              tr.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
+                .forEach(b => b.dataset.key = lastRename.key);
+            }
+          }
+          // retry with the new key
+          return await showForKey(lastRename.key, false);
         }
-
-        const who = ev.user || 'unknown';
-        historyHtml += `<li><strong>${when}</strong> – ${desc} by <span style="color:#9ca3af;">${who}</span></li>`;
+        // fallback: refresh the list so the user sees the new row
+        if (catalogTable) catalogTable.innerHTML = '';
+        nextToken = null;
+        await fetchList(currentPrefix || '', null);
+        if (detailBody) {
+          detailBody.innerHTML = `<p style="color:#fca5a5;">That item was renamed by someone else. I refreshed the list—click the new name to view it.</p>`;
+        }
+        return;
       }
-      historyHtml += '</ul></div>';
+
+      if (!itemRes.ok) throw new Error(`item failed: ${await itemRes.text()}`);
+      if (!histRes.ok) throw new Error(`history failed: ${await histRes.text()}`);
+
+      const item = await itemRes.json();
+      const history = await histRes.json();
+
+      const gwLink = item.url
+        ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>`
+        : '(no CID yet)';
+      const uploadedBy = item.uploader || '(unknown)';
+      const sizeStr = item.size != null ? humanBytes(item.size) : '(unknown)';
+      const lmStr   = item.lastModified ? niceDate(item.lastModified) : '(unknown)';
+
+      let historyHtml = '';
+      const events = Array.isArray(history.events) ? history.events : [];
+      if (!events.length) {
+        historyHtml = '<p style="color:#9ca3af;">No history recorded yet.</p>';
+      } else {
+        historyHtml = '<div class="history-list"><ul style="max-height:220px;overflow:auto;margin:0;padding:0 0 0 1rem;">';
+        for (const ev of events) {
+          const when = ev.ts ? niceDate(ev.ts) : '(unknown time)';
+          let desc = ev.action || 'event';
+          if (ev.action === 'upload') desc = 'Uploaded';
+          else if (ev.action === 'replace') desc = 'Re-uploaded (replaced existing file)';
+          else if (ev.action === 'rename') desc = ev.fromKey ? `Renamed from "${ev.fromKey}" to "${ev.key}"` : `Renamed to "${ev.key}"`;
+          else if (ev.action === 'delete') desc = 'Deleted';
+          const who = ev.user || 'unknown';
+          historyHtml += `<li style="margin:0.2rem 0;"><strong>${when}</strong> – ${desc} by <span style="color:#9ca3af;">${who}</span></li>`;
+        }
+        historyHtml += '</ul></div>';
+      }
+
+      if (detailTitle) detailTitle.textContent = itemKeyOnly(item.key) || item.key;
+      if (detailBody) {
+        detailBody.innerHTML = `
+          <dl>
+            <dt>Current name</dt><dd>${itemKeyOnly(item.key) || item.key}</dd>
+            <dt>Full key</dt><dd>${item.key}</dd>
+            <dt>Uploader</dt><dd>${uploadedBy}</dd>
+            <dt>Size</dt><dd>${sizeStr}</dd>
+            <dt>Last modified</dt><dd>${lmStr}</dd>
+            <dt>CID / Gateway</dt><dd>${gwLink}</dd>
+          </dl>
+          <h3 style="font-size:0.9rem;margin:0.5rem 0;">Change history</h3>
+          ${historyHtml}
+        `;
+      }
+    } catch (err) {
+      console.error(err);
+      if (detailBody) detailBody.innerHTML = `<p style="color:#fca5a5;">Error: ${err.message}</p>`;
     }
+  };
 
-    if (detailBody) {
-      detailBody.innerHTML = `
-        <dl>
-          <dt>Current name</dt>
-          <dd>${itemKeyOnly(item.key) || item.key}</dd>
-
-          <dt>Full key</dt>
-          <dd>${item.key}</dd>
-
-          <dt>Uploader</dt>
-          <dd>${uploadedBy}</dd>
-
-          <dt>Size</dt>
-          <dd>${sizeStr}</dd>
-
-          <dt>Last modified</dt>
-          <dd>${lmStr}</dd>
-
-          <dt>CID / Gateway</dt>
-          <dd>${gwLink}</dd>
-        </dl>
-
-        <h3 style="font-size:0.9rem;margin:0.5rem 0;">Change history</h3>
-        ${historyHtml}
-      `;
-    }
-  } catch (err) {
-    console.error(err);
-    if (detailBody) {
-      detailBody.innerHTML = `<p style="color:#fca5a5;">Error: ${err.message}</p>`;
-    }
-  }
+  const initialKey = btn.dataset.key;
+  if (initialKey) await showForKey(initialKey, true);
 });
 
 //Rename logic for modal
