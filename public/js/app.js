@@ -321,7 +321,7 @@ async function fetchList(prefix, token = null) {
       <td class="vf-right">${humanBytes(item.size)}</td>
       <td class="vf-nowrap">${niceDate(item.lastModified)}</td>
       <td class="vf-nowrap">
-        <button class="vf-btn vf-btn-primary view-file" data-key="${item.key}">View</button>
+        <button class="vf-btn vf-btn-view view-file" data-key="${item.key}">View</button>
       </td>
     `;
     catalogTable.appendChild(tr);
