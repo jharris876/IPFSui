@@ -181,3 +181,14 @@ input[type="file"]{
   .vf-table tr{ display:grid; grid-template-columns: 1fr; gap:6px; padding: 12px 10px }
   .vf-table td{ border:none; padding:8px 10px; background: #0f172a; border-radius:10px }
 }
+
+/* View Button */
+.vf-btn-primary {
+  background: #3b82f6;
+  color: #fff;
+  border: 1px solid #2963c8;
+}
+.vf-btn-primary:hover {
+  background: #2563eb;
+  border-color: #1e4fb9;
+}

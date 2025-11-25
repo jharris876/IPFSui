@@ -316,12 +316,12 @@ async function fetchList(prefix, token = null) {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="word-break:break-all">${name}</td>
-      <td class="uploader-cell">(unknown)</td>
-      <td class="size-cell" style="text-align:right;white-space:nowrap">${humanBytes(item.size)}</td>
-      <td class="date-cell">${niceDate(item.lastModified)}</td>
-      <td class="action-cell">
-        <button class="view-file" data-key="${item.key}">View</button>
+      <td style="word-break:break-all">${itemKeyOnly(item.key) || item.key}</td>
+      <td class="uploader-cell" style="color:#9ca3af;">(unknown)</td>
+      <td class="vf-right">${humanBytes(item.size)}</td>
+      <td class="vf-nowrap">${niceDate(item.lastModified)}</td>
+      <td class="vf-nowrap">
+        <button class="vf-btn vf-btn-primary view-file" data-key="${item.key}">View</button>
       </td>
     `;
     catalogTable.appendChild(tr);
