@@ -429,75 +429,69 @@ document.addEventListener('click', async (e) => {
 
 // Delegate "Rename"
 document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('#detailRename');
-  if (!btn) return;
+   if (!detailCurrentKey) return;
 
-  // Optional: ensure modal is open
-  if (!detailOverlay || detailOverlay.style.display !== 'flex') return;
-
-  if (renameInFlight) return;
-  if (!detailCurrentKey) return;
-
-  const oldKey = detailCurrentKey;
-  const base   = itemKeyOnly(oldKey) || oldKey;
-
+  // suggest current leaf name
+  const base = detailCurrentKey.split('/').pop() || detailCurrentKey;
   const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
+
+  // If user cancels or doesn't change, do nothing.
   if (!newName || newName === base) return;
+
+  // Simple client-side validation
   if (newName.includes('/')) {
     alert('New name must be a plain filename (no slashes).');
     return;
   }
 
-  renameInFlight = true;
-  btn.disabled = true;
-
+  detailRename.disabled = true;
   try {
     const res = await fetch('/api/catalog/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromKey: oldKey, newName })
+      body: JSON.stringify({ fromKey: detailCurrentKey, newName })
     });
     if (!res.ok) throw new Error(await res.text());
-
     const { key: toKey, lastModified } = await res.json();
 
-    // Update modal state + title
+    // Update our modal's current key
     detailCurrentKey = toKey;
-    if (detailTitle) detailTitle.textContent = itemKeyOnly(toKey) || toKey;
 
-    // Patch modal fields in place
-    const fullKeyDd = detailBody?.querySelector('[data-field="fullKey"]');
-    if (fullKeyDd) fullKeyDd.textContent = toKey;
+    // Update the row in the table (name & data-key on buttons)
+    const row = document.querySelector(`button.view-file[data-key="${detailCurrentKey}"]`)
+                 ?.closest('tr') || [...document.querySelectorAll('button.view-file')]
+                 .map(b => b.closest('tr'))
+                 .find(tr => tr?.querySelector('button.view-file')?.dataset.key === detailCurrentKey);
 
-    const lmDd = detailBody?.querySelector('[data-field="lastModified"]');
-    if (lmDd && lastModified) lmDd.textContent = niceDate(lastModified);
-
-    // Update the corresponding row in the catalog (so future clicks use new key)
-    const escOld = (window.CSS && CSS.escape) ? CSS.escape(oldKey) : oldKey.replace(/"/g, '\\"');
-    const rowBtn = document.querySelector(`button.view-file[data-key="${escOld}"]`);
-    if (rowBtn) {
-      const tr = rowBtn.closest('tr');
-      // 1) update first cell (name)
-      const nameCell = tr?.querySelector('td');
-      if (nameCell) nameCell.textContent = itemKeyOnly(toKey) || toKey;
-      // 2) update all row buttons’ data-key
-      tr?.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
+    if (row) {
+      const tds = row.querySelectorAll('td');
+      // 0: name, 1: uploader, 2: size, 3: lastModified, 4: action
+      if (tds[0]) tds[0].textContent = (toKey.split('/').pop() || toKey);
+      if (tds[3] && lastModified) tds[3].textContent = niceDate(lastModified);
+      row.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
         .forEach(b => b.dataset.key = toKey);
-      // 3) patch “Last Modified” cell if we have it
-      if (lastModified) {
-        const tds = tr?.querySelectorAll('td');
-        const lastModCell = tds && tds[3];
-        if (lastModCell) lastModCell.textContent = niceDate(lastModified);
-      }
     }
+
+    // Refresh the modal details to show the new name & CID link
+    await (async () => {
+      const itemUrl = new URL('/api/catalog/item', window.location.origin);
+      itemUrl.searchParams.set('key', detailCurrentKey);
+      const histUrl = new URL('/api/catalog/history', window.location.origin);
+      histUrl.searchParams.set('key', detailCurrentKey);
+      const [itemRes, histRes] = await Promise.all([fetch(itemUrl), fetch(histUrl)]);
+      if (!itemRes.ok) throw new Error(await itemRes.text());
+      if (!histRes.ok) throw new Error(await histRes.text());
+      const item = await itemRes.json();
+      const history = await histRes.json();
+      renderDetailModal(item, history); // your existing function that writes detailBody + title
+    })();
   } catch (err) {
     alert(`Rename failed: ${err.message}`);
   } finally {
-    // ALWAYS clear so the button works again without closing the modal
-    renameInFlight = false;
-    btn.disabled = false;
+    detailRename.disabled = false;
   }
 });
+
 //Delegate "View"
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button.view-file');

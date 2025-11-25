@@ -324,3 +324,56 @@ button.view-file.vf-btn.vf-btn-primary {
 .vf-card,
 .vf-table-wrap,
 .vf-table thead th { z-index: 1; }
+
+/* Catalog viewport: capped height with on-theme scrolling */
+.vf-table-wrap{
+  max-height: 560px;        /* adjust to taste (e.g., 480–640) */
+  overflow: auto;
+  border-radius: 10px;
+}
+
+/* Smooth scrolling feel */
+.vf-table-wrap { scroll-behavior: smooth; }
+
+/* Dark themed scrollbars (WebKit/Blink) */
+.vf-table-wrap::-webkit-scrollbar{
+  width: 10px;
+  height: 10px;
+}
+.vf-table-wrap::-webkit-scrollbar-track{
+  background: #0f172a;                /* slate-900 */
+  border-radius: 8px;
+}
+.vf-table-wrap::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, #334155, #475569); /* slate 700→600 */
+  border-radius: 8px;
+  border: 2px solid #0f172a;          /* inset look */
+}
+.vf-table-wrap::-webkit-scrollbar-thumb:hover{
+  background: linear-gradient(180deg, #3b82f6, #22d3ee); /* blue→cyan accent */
+}
+
+/* Firefox scrollbar colors */
+.vf-table-wrap{
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #0f172a; /* thumb / track */
+}
+
+/* Keep table header sticky while scrolling the body */
+.vf-table thead th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #0b1220;  /* match your card bg */
+}
+
+/* Make the action column buttons look consistent */
+.vf-btn.vf-btn-primary{
+  background: #3b82f6;
+  color: #eaf2ff;
+  border: 1px solid rgba(59,130,246,0.4);
+}
+.vf-btn.vf-btn-primary:hover{
+  background: #2563eb;
+  border-color: rgba(59,130,246,0.6);
+}
