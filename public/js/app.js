@@ -429,67 +429,75 @@ document.addEventListener('click', async (e) => {
 
 // Delegate "Rename"
 document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button.rename-file');
+  const btn = e.target.closest('#detailRename');
   if (!btn) return;
 
-  const fromKey = btn.dataset.key;
-  const base = fromKey.split('/').pop();
+  // Optional: ensure modal is open
+  if (!detailOverlay || detailOverlay.style.display !== 'flex') return;
+
+  if (renameInFlight) return;
+  if (!detailCurrentKey) return;
+
+  const oldKey = detailCurrentKey;
+  const base   = itemKeyOnly(oldKey) || oldKey;
+
   const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
   if (!newName || newName === base) return;
-
-  // basic validation
   if (newName.includes('/')) {
     alert('New name must be a plain filename (no slashes).');
     return;
   }
 
+  renameInFlight = true;
   btn.disabled = true;
+
   try {
     const res = await fetch('/api/catalog/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromKey, newName })
+      body: JSON.stringify({ fromKey: oldKey, newName })
     });
-    if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || `HTTP ${res.status}`);
-    }
+    if (!res.ok) throw new Error(await res.text());
 
-    // we EXPECT the server to send { key, lastModified }
-    const payload = await res.json();
-    console.log('[rename response]', payload);
+    const { key: toKey, lastModified } = await res.json();
 
-    const toKey = payload.key;
-    // fallback to *right now* if server didn't send lastModified
-    const lmIso = payload.lastModified || new Date().toISOString();
+    // Update modal state + title
+    detailCurrentKey = toKey;
+    if (detailTitle) detailTitle.textContent = itemKeyOnly(toKey) || toKey;
 
-    const tr = btn.closest('tr');
-    if (tr) {
-      // col 0 = name/key
-      const keyCell = tr.querySelector('td');
-      if (keyCell) keyCell.textContent = itemKeyOnly(toKey);
+    // Patch modal fields in place
+    const fullKeyDd = detailBody?.querySelector('[data-field="fullKey"]');
+    if (fullKeyDd) fullKeyDd.textContent = toKey;
 
-      // update buttons to new key
-      tr.querySelectorAll('button.get-cid, button.rename-file')
+    const lmDd = detailBody?.querySelector('[data-field="lastModified"]');
+    if (lmDd && lastModified) lmDd.textContent = niceDate(lastModified);
+
+    // Update the corresponding row in the catalog (so future clicks use new key)
+    const escOld = (window.CSS && CSS.escape) ? CSS.escape(oldKey) : oldKey.replace(/"/g, '\\"');
+    const rowBtn = document.querySelector(`button.view-file[data-key="${escOld}"]`);
+    if (rowBtn) {
+      const tr = rowBtn.closest('tr');
+      // 1) update first cell (name)
+      const nameCell = tr?.querySelector('td');
+      if (nameCell) nameCell.textContent = itemKeyOnly(toKey) || toKey;
+      // 2) update all row buttons’ data-key
+      tr?.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
         .forEach(b => b.dataset.key = toKey);
-
-      // col 2 = last modified
-      const dateCell = tr.children[2];
-      if (dateCell) {
-        dateCell.textContent = niceDate(lmIso);
+      // 3) patch “Last Modified” cell if we have it
+      if (lastModified) {
+        const tds = tr?.querySelectorAll('td');
+        const lastModCell = tds && tds[3];
+        if (lastModCell) lastModCell.textContent = niceDate(lastModified);
       }
-
-      // clear CID slot
-      const slot = tr.querySelector('.cid-slot');
-      if (slot) slot.textContent = '';
     }
   } catch (err) {
     alert(`Rename failed: ${err.message}`);
   } finally {
+    // ALWAYS clear so the button works again without closing the modal
+    renameInFlight = false;
     btn.disabled = false;
   }
 });
-
 //Delegate "View"
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button.view-file');
