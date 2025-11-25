@@ -223,6 +223,7 @@ document.addEventListener('keydown', (e) => {
 let nextToken = null;
 let currentPrefix = '';
 let detailCurrentKey = null;
+let renameBusy = false;
 
 async function loadDetailsForKey(key) {
   detailCurrentKey = key;
@@ -290,7 +291,7 @@ async function loadDetailsForKey(key) {
           <dd>${itemKeyOnly(item.key) || item.key}</dd>
 
           <dt>Full key</dt>
-          <dd>${item.key}</dd>
+          <dd data-field="fullKey">${item.key}</dd>
 
           <dt>Uploader</dt>
           <dd>${uploadedBy}</dd>
@@ -299,7 +300,7 @@ async function loadDetailsForKey(key) {
           <dd>${sizeStr}</dd>
 
           <dt>Last modified</dt>
-          <dd>${lmStr}</dd>
+          <dd data-field="lastModified">${lmStr}</dd>
 
           <dt>CID / Gateway</dt>
           <dd>${gwLink}</dd>
@@ -648,39 +649,71 @@ document.addEventListener('click', async (e) => {
 
 //Rename logic for modal
 detailRename?.addEventListener('click', async () => {
-  if (!detailCurrentKey) return;
+  if (renameBusy) return;               // don’t allow double-click races
+  if (!currentDetailKey) return;
 
-  const base = itemKeyOnly(detailCurrentKey) || detailCurrentKey;
+  const oldKey = currentDetailKey;
+  const base   = (itemKeyOnly(oldKey) || oldKey);
+
   const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
   if (!newName || newName === base) return;
-
   if (newName.includes('/')) {
     alert('New name must be a plain filename (no slashes).');
     return;
   }
 
+  renameBusy = true;
+  detailRename.disabled = true;
+
   try {
     const res = await fetch('/api/catalog/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromKey: detailCurrentKey, newName })
+      body: JSON.stringify({ fromKey: oldKey, newName })
     });
+    if (!res.ok) throw new Error(await res.text());
 
-    if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || `HTTP ${res.status}`);
+    const { key: toKey, lastModified } = await res.json();
+
+    // Update modal state
+    currentDetailKey = toKey;
+    if (detailTitle) detailTitle.textContent = itemKeyOnly(toKey) || toKey;
+
+    if (detailBody) {
+      // These selectors rely on small data hooks; add them once in your modal HTML render
+      const fullKeyDd = detailBody.querySelector('[data-field="fullKey"]');
+      if (fullKeyDd) fullKeyDd.textContent = toKey;
+
+      const lmDd = detailBody.querySelector('[data-field="lastModified"]');
+      if (lmDd && lastModified) lmDd.textContent = niceDate(lastModified);
     }
 
-    const { key: toKey } = await res.json();
-    detailCurrentKey = toKey;
+    // Update the row in the table (so future clicks use the new key)
+    // Try to find the exact row by the old data-key first
+    const escapedOld = (window.CSS && CSS.escape) ? CSS.escape(oldKey) : oldKey.replace(/"/g, '\\"');
+    const rowBtn = document.querySelector(`button.view-file[data-key="${escapedOld}"]`);
+    if (rowBtn) {
+      const tr = rowBtn.closest('tr');
+      // update first cell (name/key)
+      const nameCell = tr?.querySelector('td');
+      if (nameCell) nameCell.textContent = (itemKeyOnly(toKey) || toKey);
+      // update all buttons in the row to new key
+      tr?.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
+        .forEach(b => b.dataset.key = toKey);
+      // update the “Last Modified” cell if we have it
+      if (lastModified) {
+        const cells = tr?.querySelectorAll('td');
+        // Assuming columns: [name, uploader, size, lastModified, action]
+        const lastModCell = cells && cells[3];
+        if (lastModCell) lastModCell.textContent = niceDate(lastModified);
+      }
+    }
 
-    // Reload modal details for the new key
-    await loadDetailsForKey(toKey);
-
-    // Refresh table so the row shows new name + modified date
-    catalogForm?.dispatchEvent(new Event('submit'));
   } catch (err) {
     alert(`Rename failed: ${err.message}`);
+  } finally {
+    renameBusy = false;
+    detailRename.disabled = false;   // <- ensure button works again without closing modal
   }
 });
 
