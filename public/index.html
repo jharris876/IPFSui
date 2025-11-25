@@ -3,63 +3,93 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Direct Upload to Filebase</h1>
-
-    <div class="panel" style="margin-bottom:16px">
-      <form id="directUploadForm" class="inline" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-        <input type="file" id="directFile" name="file" required />
-        <input type="text" id="newFilename" placeholder="Optional: new filename (no slashes)" />
-        <input type="password" id="uploadToken" placeholder="Paste APP_UPLOAD_TOKEN (temporary)" required />
-        <button type="submit" class="secondary">Upload</button>
-      </form>
-      <progress id="overallProgress" value="0" max="100" style="display:none"></progress>
-      <div id="directResult" class="note"></div>
+  <header class="vf-topbar">
+    <div class="vf-shell">
+      <div class="vf-brand">
+        <div class="vf-logo" aria-hidden="true">V</div>
+        <div class="vf-brand-text">
+          <h1 class="vf-title">VaultFlow</h1>
+          <div class="vf-subtitle">Evidence & media catalog</div>
+        </div>
+      </div>
+      <nav class="vf-actions">
+        <!-- room for future user menu / help -->
+      </nav>
     </div>
+  </header>
 
-    <h2>Bucket Catalog</h2>
-    <div class="panel">
-      <form id="catalogForm" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <input type="text" id="catalogPrefix" placeholder='Filter by prefix (e.g. "2025/09/04/")'>
-        <button type="submit" class="ghost">Load</button>
-        <span id="catalogMeta" class="note"></span>
+  <main class="vf-shell">
+    <!-- Upload Card -->
+    <section class="vf-card">
+      <h2 class="vf-card-title">Direct upload to Filebase</h2>
+      <form id="directUploadForm" class="vf-grid">
+        <label class="vf-field">
+          <span class="vf-label">Choose file</span>
+          <input type="file" id="directFile" />
+        </label>
+
+        <label class="vf-field">
+          <span class="vf-label">Optional: new filename (no “/”)</span>
+          <input id="newFilename" placeholder="e.g. traffic_stop_cam1.mp4" />
+        </label>
+
+        <label class="vf-field">
+          <span class="vf-label">Paste APP_UPLOAD_TOKEN</span>
+          <input id="uploadToken" placeholder="••••••" />
+        </label>
+
+        <div class="vf-upload-cta">
+          <button class="vf-btn vf-btn-accent" type="submit">Upload</button>
+        </div>
+
+        <progress id="overallProgress" max="100" value="0" class="vf-progress" style="display:none"></progress>
+        <div id="directResult" class="vf-result"></div>
       </form>
+    </section>
 
-      <div class="table-wrap"><!-- scrollable container -->
-        <table id="catalogTable">
+    <!-- Catalog Card -->
+    <section class="vf-card">
+      <div class="vf-card-head">
+        <h2 class="vf-card-title">Bucket Catalog</h2>
+        <div class="vf-filter">
+          <input id="catalogPrefix" placeholder='Filter by prefix (e.g. "2025/")' />
+          <button id="catalogLoad" class="vf-btn vf-btn-secondary">Load</button>
+          <span id="catalogMeta" class="vf-meta"></span>
+        </div>
+      </div>
+
+      <div class="vf-table-wrap">
+        <table id="catalogTable" class="vf-table">
           <thead>
             <tr>
-              <th>Name / Key</th>
-              <th>UPLOADER</th>
-              <th>Size</th>
-              <th>Last Modified</th>
-              <th>Action</th>
+              <th data-sort="name">Name / Key</th>
+              <th data-sort="uploader">Uploader</th>
+              <th data-sort="size" class="vf-right">Size</th>
+              <th data-sort="modified" class="vf-nowrap">Last Modified</th>
+              <th class="vf-nowrap">Action</th>
             </tr>
           </thead>
-          <tbody></tbody>
+          <tbody><!-- filled by app.js --></tbody>
         </table>
       </div>
+      <div class="vf-table-foot">
+        <button id="catalogMore" class="vf-btn vf-btn-outline" style="display:none">Load more</button>
+      </div>
+    </section>
+  </main>
 
-      <div style="margin-top:10px">
-        <button id="catalogMore" class="ghost" style="display:none">Load more</button>
-      </div>
+  <!-- Detail Modal -->
+  <div id="detailModal" class="vf-modal" hidden>
+    <div class="vf-modal-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+      <header class="vf-modal-head">
+        <h3 id="detailTitle" class="vf-modal-title">Item</h3>
+        <div class="vf-modal-actions">
+          <button id="detailRename" class="vf-btn vf-btn-secondary">Rename</button>
+          <button id="detailClose" class="vf-icon-btn" aria-label="Close">✕</button>
+        </div>
+      </header>
+      <section id="detailBody" class="vf-modal-body"><!-- filled by app.js --></section>
     </div>
   </div>
-  <div id="detailOverlay" class="modal-overlay" style="display:none;">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 id="detailTitle">File details</h2>
-      <div>
-        <button id="detailRename" class="pill-button" style="margin-right:0.5rem;">
-          Rename
-        </button>
-        <button id="detailClose" class="close-button" aria-label="Close">&times;</button>
-      </div>
-    </div>
-    <div id="detailBody" class="modal-body">
-      Loading…
-    </div>
-  </div>
-</div>
   <script src="/js/app.js"></script>
 </body>

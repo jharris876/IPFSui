@@ -1,3 +1,4 @@
+document.title = 'VaultFlow - Evidence & Media Catalog';
 // ---------- helpers ----------
 function humanBytes(n) {
   const u = ['B','KB','MB','GB','TB']; let i = 0;
