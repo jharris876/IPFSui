@@ -530,31 +530,38 @@ renameConfirm?.addEventListener('click', async () => {
   }
 });
 
-//Delegate "View"
+// Delegate "View"  — modal details + inline rename panel (no prompt)
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button.view-file');
   if (!btn) return;
 
-  // --- local refs to modal elements (no external helpers required)
-  const modal   = document.getElementById('detailModal');
-  const titleEl = document.getElementById('detailTitle');
-  const bodyEl  = document.getElementById('detailBody');
-  const renameEl= document.getElementById('detailRename');
+  // Modal bits
+  const modal        = document.getElementById('detailModal');
+  const titleEl      = document.getElementById('detailTitle');
+  const bodyEl       = document.getElementById('detailBody');
+  const renameBtn    = document.getElementById('detailRename');
 
-  const open = () => {
+  // Inline rename sub-panel
+  const renamePanel  = document.getElementById('renamePanel');
+  const renameInput  = document.getElementById('renameInput');
+  let   renameCancel = document.getElementById('renameCancel');
+  let   renameConfirm= document.getElementById('renameConfirm');
+
+  // global you said you’re using
+  window.detailCurrentKey = null;
+
+  const openModal = () => {
     if (!modal) return;
     modal.removeAttribute('hidden');
     document.body.style.overflow = 'hidden';
   };
-  const setBody = (html) => { if (bodyEl) bodyEl.innerHTML = html; };
   const setTitle = (txt) => { if (titleEl) titleEl.textContent = txt || 'Item'; };
+  const setBody  = (html) => { if (bodyEl)  bodyEl.innerHTML = html; };
 
-  // helper to render the details + history
   const renderDetails = (item, history) => {
     const gwLink = item.url
       ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>`
       : '(no CID yet)';
-
     const uploadedBy = item.uploader || '(unknown)';
     const sizeStr    = item.size != null ? humanBytes(item.size) : '(unknown)';
     const lmStr      = item.lastModified ? niceDate(item.lastModified) : '(unknown)';
@@ -570,9 +577,7 @@ document.addEventListener('click', async (e) => {
         let desc = ev.action || 'event';
         if (ev.action === 'upload')        desc = 'Uploaded';
         else if (ev.action === 'replace')  desc = 'Re-uploaded (replaced existing file)';
-        else if (ev.action === 'rename')   desc = ev.fromKey
-              ? `Renamed from "${ev.fromKey}" to "${ev.key}"`
-              : `Renamed to "${ev.key}"`;
+        else if (ev.action === 'rename')   desc = ev.fromKey ? `Renamed from "${ev.fromKey}" to "${ev.key}"` : `Renamed to "${ev.key}"`;
         else if (ev.action === 'delete')   desc = 'Deleted';
         const who = ev.user || 'unknown';
         historyHtml += `<li style="margin:0.2rem 0;"><strong>${when}</strong> – ${desc} by <span style="color:#9ca3af;">${who}</span></li>`;
@@ -595,29 +600,107 @@ document.addEventListener('click', async (e) => {
     `);
   };
 
-  // fetch item + history, following a rename if necessary
+  // Wire the inline rename panel for the current item (no stacked listeners)
+  const wireRenameForItem = (item) => {
+    if (!renameBtn || !renamePanel || !renameInput) return;
+
+    // Reset/close panel each time we (re)load an item
+    renamePanel.hidden = true;
+
+    // Replace the buttons with clones to drop any old listeners
+    const newRenameBtn = renameBtn.cloneNode(true);
+    renameBtn.replaceWith(newRenameBtn);
+
+    // Also reset the inner panel buttons so cancel/confirm don’t accumulate
+    const newCancel  = renameCancel.cloneNode(true);
+    const newConfirm = renameConfirm.cloneNode(true);
+    renameCancel.replaceWith(newCancel);
+    renameConfirm.replaceWith(newConfirm);
+    renameCancel  = newCancel;
+    renameConfirm = newConfirm;
+
+    newRenameBtn.addEventListener('click', () => {
+      const base = item.key.split('/').pop();
+      renameInput.value = base;
+      renamePanel.hidden = false;
+      renameInput.focus();
+      renameInput.select();
+    });
+
+    renameCancel.addEventListener('click', () => {
+      renamePanel.hidden = true; // nothing sticky after cancel
+    });
+
+    renameConfirm.addEventListener('click', async () => {
+      const base    = item.key.split('/').pop();
+      const newName = (renameInput.value || '').trim();
+
+      if (!newName) { renamePanel.hidden = true; return; }
+      if (newName === base) { renamePanel.hidden = true; return; }
+      if (newName.includes('/')) { alert('New name must be a plain filename (no slashes).'); return; }
+
+      // lock UI while renaming
+      renameConfirm.disabled = true;
+      renameCancel.disabled  = true;
+
+      try {
+        const res = await fetch('/api/catalog/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fromKey: item.key, newName })
+        });
+        if (!res.ok) {
+          const msg = await res.text().catch(()=>'');
+          throw new Error(msg || `HTTP ${res.status}`);
+        }
+        const { key: toKey, lastModified } = await res.json();
+
+        // Update current row so future clicks use the new key
+        const tr = btn.closest('tr');
+        if (tr) {
+          const keyCell = tr.querySelector('td');
+          if (keyCell) keyCell.textContent = toKey;
+          tr.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
+            .forEach(b => b.dataset.key = toKey);
+          // also patch the date cell in this row if we have it
+          const dateCell = tr.querySelector('td:nth-child(4)');
+          if (dateCell && lastModified) dateCell.textContent = niceDate(lastModified);
+        }
+
+        // Close panel and reload modal for new key
+        renamePanel.hidden = true;
+        window.detailCurrentKey = toKey;
+        await loadForKey(toKey, false);
+      } catch (err) {
+        alert(`Rename failed: ${err.message}`);
+      } finally {
+        renameConfirm.disabled = false;
+        renameCancel.disabled  = false;
+      }
+    });
+  };
+
+  // Load details + history for a key (follow if it was renamed elsewhere)
   const loadForKey = async (key, updateRowIfChanged = false) => {
-    open();
+    window.detailCurrentKey = key;
+    openModal();
     setTitle(key);
     setBody('<p style="color:#9ca3af;">Loading…</p>');
 
     try {
       const itemUrl = new URL('/api/catalog/item', window.location.origin);
       itemUrl.searchParams.set('key', key);
-
       const histUrl = new URL('/api/catalog/history', window.location.origin);
       histUrl.searchParams.set('key', key);
 
       const [itemRes, histRes] = await Promise.all([ fetch(itemUrl), fetch(histUrl) ]);
 
-      // if item 404's, try to discover the newest rename target from history
       if (itemRes.status === 404) {
-        const histJson = await histRes.json().catch(() => ({ events: [] }));
-        const events   = Array.isArray(histJson.events) ? histJson.events : [];
+        const histJson   = await histRes.json().catch(() => ({ events: [] }));
+        const events     = Array.isArray(histJson.events) ? histJson.events : [];
         const lastRename = events.find(ev => ev.action === 'rename' && ev.key && ev.ts);
         if (lastRename && lastRename.key && lastRename.key !== key) {
           if (updateRowIfChanged) {
-            // update the row so future clicks use the new key
             const tr = btn.closest('tr');
             if (tr) {
               const keyCell = tr.querySelector('td');
@@ -628,7 +711,6 @@ document.addEventListener('click', async (e) => {
           }
           return await loadForKey(lastRename.key, false);
         }
-        // fallback: refresh the list so user sees the current state
         if (typeof fetchList === 'function') {
           if (typeof catalogTable !== 'undefined' && catalogTable) catalogTable.innerHTML = '';
           if (typeof nextToken !== 'undefined') nextToken = null;
@@ -643,41 +725,9 @@ document.addEventListener('click', async (e) => {
 
       const item = await itemRes.json();
       const hist = await histRes.json();
+
       renderDetails(item, hist);
-
-      // wire up Rename inside the modal (one-time per open)
-      if (renameEl) {
-        const renameHandler = async () => {
-          const base = item.key.split('/').pop();
-          const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
-          if (!newName || newName === base) return;
-          if (newName.includes('/')) { alert('New name must be a plain filename (no slashes).'); return; }
-
-          const res = await fetch('/api/catalog/rename', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fromKey: item.key, newName })
-          });
-          if (!res.ok) { alert(`Rename failed: ${await res.text()}`); return; }
-
-          const { key: toKey } = await res.json();
-          // update table row immediately
-          const tr = btn.closest('tr');
-          if (tr) {
-            const keyCell = tr.querySelector('td');
-            if (keyCell) keyCell.textContent = toKey;
-            tr.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
-              .forEach(b => b.dataset.key = toKey);
-          }
-          // reload modal for new key
-          await loadForKey(toKey, false);
-        };
-        // ensure we don't stack multiple listeners across opens
-        renameEl.replaceWith(renameEl.cloneNode(true));
-        const freshRenameBtn = document.getElementById('detailRename');
-        freshRenameBtn?.addEventListener('click', renameHandler, { once: true });
-      }
-
+      wireRenameForItem(item);   // <— hook up inline rename for THIS item
     } catch (err) {
       console.error(err);
       setBody(`<p style="color:#fca5a5;">Error: ${err.message}</p>`);
@@ -688,75 +738,125 @@ document.addEventListener('click', async (e) => {
   if (clickedKey) await loadForKey(clickedKey, true);
 });
 
-//Rename logic for modal
-detailRename?.addEventListener('click', async () => {
-  if (renameBusy) return;               // don’t allow double-click races
-  if (!detailCurrentKey) return;
+// Inline rename for the modal (no prompt)
+(() => {
+  const detailTitle   = document.getElementById('detailTitle');
+  const detailBody    = document.getElementById('detailBody');
+  let   detailRename  = document.getElementById('detailRename');
 
-  const oldKey = detailCurrentKey;
-  const base   = (itemKeyOnly(oldKey) || oldKey);
+  const panel         = document.getElementById('renamePanel');
+  const input         = document.getElementById('renameInput');
+  let   btnCancel     = document.getElementById('renameCancel');
+  let   btnConfirm    = document.getElementById('renameConfirm');
 
-  const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
-  if (!newName || newName === base) return;
-  if (newName.includes('/')) {
-    alert('New name must be a plain filename (no slashes).');
-    return;
-  }
+  if (!detailRename || !panel || !input || !btnCancel || !btnConfirm) return;
 
-  renameBusy = true;
-  detailRename.disabled = true;
+  // Rebind everything with fresh nodes so listeners never stack
+  function rebindRenameUI() {
+    // fresh outer Rename button
+    const freshRename = detailRename.cloneNode(true);
+    detailRename.replaceWith(freshRename);
+    detailRename = freshRename;
 
-  try {
-    const res = await fetch('/api/catalog/rename', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromKey: oldKey, newName })
+    // fresh inner panel buttons
+    const freshCancel  = btnCancel.cloneNode(true);
+    const freshConfirm = btnConfirm.cloneNode(true);
+    btnCancel.replaceWith(freshCancel);
+    btnConfirm.replaceWith(freshConfirm);
+    btnCancel  = freshCancel;
+    btnConfirm = freshConfirm;
+
+    panel.hidden = true;
+
+    // Open the panel
+    detailRename.addEventListener('click', () => {
+      const base = (detailCurrentKey || '').split('/').pop() || detailCurrentKey || '';
+      input.value = base;
+      panel.hidden = false;
+      input.focus();
+      input.select();
     });
-    if (!res.ok) throw new Error(await res.text());
 
-    const { key: toKey, lastModified } = await res.json();
+    // Cancel simply hides the panel (no sticky state)
+    btnCancel.addEventListener('click', () => {
+      panel.hidden = true;
+    });
 
-    // Update modal state
-    detailCurrentKey = toKey;
-    if (detailTitle) detailTitle.textContent = itemKeyOnly(toKey) || toKey;
+    // Confirm rename
+    btnConfirm.addEventListener('click', async () => {
+      if (!window.detailCurrentKey) return;
 
-    if (detailBody) {
-      // These selectors rely on small data hooks; add them once in your modal HTML render
-      const fullKeyDd = detailBody.querySelector('[data-field="fullKey"]');
-      if (fullKeyDd) fullKeyDd.textContent = toKey;
+      const oldKey  = window.detailCurrentKey;
+      const base    = oldKey.split('/').pop();
+      const newName = (input.value || '').trim();
 
-      const lmDd = detailBody.querySelector('[data-field="lastModified"]');
-      if (lmDd && lastModified) lmDd.textContent = niceDate(lastModified);
-    }
+      // Allow cancel or “no change” without breaking the button
+      if (!newName || newName === base) { panel.hidden = true; return; }
+      if (newName.includes('/')) { alert('New name must be a plain filename (no slashes).'); return; }
 
-    // Update the row in the table (so future clicks use the new key)
-    // Try to find the exact row by the old data-key first
-    const escapedOld = (window.CSS && CSS.escape) ? CSS.escape(oldKey) : oldKey.replace(/"/g, '\\"');
-    const rowBtn = document.querySelector(`button.view-file[data-key="${escapedOld}"]`);
-    if (rowBtn) {
-      const tr = rowBtn.closest('tr');
-      // update first cell (name/key)
-      const nameCell = tr?.querySelector('td');
-      if (nameCell) nameCell.textContent = (itemKeyOnly(toKey) || toKey);
-      // update all buttons in the row to new key
-      tr?.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
-        .forEach(b => b.dataset.key = toKey);
-      // update the “Last Modified” cell if we have it
-      if (lastModified) {
-        const cells = tr?.querySelectorAll('td');
-        // Assuming columns: [name, uploader, size, lastModified, action]
-        const lastModCell = cells && cells[3];
-        if (lastModCell) lastModCell.textContent = niceDate(lastModified);
+      if (window.renameBusy) return;
+      window.renameBusy = true;
+
+      btnConfirm.disabled   = true;
+      btnCancel.disabled    = true;
+      detailRename.disabled = true;
+
+      try {
+        const res = await fetch('/api/catalog/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fromKey: oldKey, newName })
+        });
+        if (!res.ok) throw new Error(await res.text());
+
+        const { key: toKey, lastModified } = await res.json();
+
+        // Update global + modal header
+        window.detailCurrentKey = toKey;
+        if (detailTitle) detailTitle.textContent = (toKey.split('/').pop()) || toKey;
+
+        // Update fields inside the modal body if present
+        if (detailBody) {
+          const fullKeyDd = detailBody.querySelector('[data-field="fullKey"]');
+          if (fullKeyDd) fullKeyDd.textContent = toKey;
+
+          const lmDd = detailBody.querySelector('[data-field="lastModified"]');
+          if (lmDd && lastModified) lmDd.textContent = niceDate(lastModified);
+        }
+
+        // Update the table row (first cell name + data-key on buttons + last modified)
+        const rows = document.querySelectorAll('#catalogTable tbody tr');
+        let   found = null;
+        rows.forEach(r => {
+          const viewBtn = r.querySelector('button.view-file');
+          if (viewBtn && viewBtn.dataset.key === oldKey) found = r;
+        });
+        if (found) {
+          const keyCell = found.querySelector('td');
+          if (keyCell) keyCell.textContent = (toKey.split('/').pop()) || toKey;
+          found.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
+            .forEach(b => b.dataset.key = toKey);
+          const cells = found.querySelectorAll('td');
+          // columns: [name, uploader, size, lastModified, action]
+          if (cells && cells[3] && lastModified) cells[3].textContent = niceDate(lastModified);
+        }
+
+        panel.hidden = true;
+      } catch (err) {
+        alert(`Rename failed: ${err.message}`);
+      } finally {
+        window.renameBusy = false;
+        btnConfirm.disabled   = false;
+        btnCancel.disabled    = false;
+        detailRename.disabled = false;
+        // Make sure the button is usable again even after cancel/no-change
+        rebindRenameUI();
       }
-    }
-
-  } catch (err) {
-    alert(`Rename failed: ${err.message}`);
-  } finally {
-    renameBusy = false;
-    detailRename.disabled = false;   // <- ensure button works again without closing modal
+    });
   }
-});
+
+  rebindRenameUI();
+})();
 
 // Auto-load first page on initial load
 window.addEventListener('DOMContentLoaded', () => {
