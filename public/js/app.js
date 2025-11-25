@@ -181,23 +181,43 @@ const catalogTable   = catalogTableEl ? catalogTableEl.querySelector('tbody') : 
 
 const catalogMore    = document.getElementById('catalogMore');
 
-const detailOverlay = document.getElementById('detailOverlay');
+// ---------- modal helpers ----------
+const detailOverlay = document.getElementById('detailModal');   // <div id="detailModal" class="vf-modal" hidden>
 const detailTitle   = document.getElementById('detailTitle');
 const detailBody    = document.getElementById('detailBody');
-const detailClose   = document.getElementById('detailClose');
-const detailRename  = document.getElementById('detailRename');
+const detailClose   = document.getElementById('detailClose');   // the “✕” button in header
+const detailRename  = document.getElementById('detailRename');  // the header Rename button
 
-//For view button
 function openDetailModal() {
-  if (detailOverlay) detailOverlay.style.display = 'flex';
-}
-function closeDetailModal() {
-  if (detailOverlay) detailOverlay.style.display = 'none';
+  if (!detailOverlay) return;
+  // show via attribute (single source of truth)
+  detailOverlay.removeAttribute('hidden');
+  // lock background scroll
+  document.body.style.overflow = 'hidden';
 }
 
-detailClose?.addEventListener('click', () => closeDetailModal());
+function closeDetailModal() {
+  if (!detailOverlay) return;
+  // hide via attribute
+  detailOverlay.setAttribute('hidden', '');
+  // restore scroll
+  document.body.style.overflow = '';
+}
+
+// close with X
+detailClose?.addEventListener('click', closeDetailModal);
+
+// close when clicking on the dark backdrop ONLY (not inside the card)
 detailOverlay?.addEventListener('click', (e) => {
+  // if the click started on the overlay itself (not inside the card), close
   if (e.target === detailOverlay) closeDetailModal();
+});
+
+// close with Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && detailOverlay && !detailOverlay.hasAttribute('hidden')) {
+    closeDetailModal();
+  }
 });
 //end view button
 let nextToken = null;
