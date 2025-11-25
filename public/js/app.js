@@ -427,82 +427,85 @@ document.addEventListener('click', async (e) => {
   }
 });
 
-// Delegate "Rename"
-document.addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  if (!detailCurrentKey) return;
+// --- Delegate "Rename" inside the View modal (robust against Cancel / no-change) ---
+if (typeof detailCurrentKey === 'undefined') {
+  // make sure the symbol exists; your code should set it when opening the modal
+  window.detailCurrentKey = undefined;
+}
 
-  // Prevent double-clicks
-  if (btn.disabled) return;
-  btn.disabled = true;
+detailRename?.addEventListener('click', async (e) => {
+  // guard against double-clicks or stuck states
+  if (renameBusy) return;
+  renameBusy = true;
 
   try {
     const fromKey = detailCurrentKey;
-    const base = fromKey.split('/').pop() || '';
+    if (!fromKey) return; // nothing to rename
 
-    // Prompt the user
-    const input = window.prompt(`Rename\n\n${base}\n\nto:`, base);
+    const base = (fromKey.split('/').pop() || '').trim();
 
-    // User pressed Cancel -> do nothing, but make sure the button is re-enabled in finally
-    if (input === null) return;
+    // Synchronous prompt – may return null on cancel
+    const raw = window.prompt(`Rename\n\n${base}\n\nto:`, base);
 
-    const newName = input.trim();
+    const canceled  = (raw === null);
+    const next      = canceled ? '' : String(raw).trim();
+    const noChange  = !canceled && next === base;
+    const invalid   = !canceled && (next.length === 0 || next.includes('/'));
 
-    // No slashes allowed; also ignore "no change"
-    if (!newName || newName.includes('/')) {
-      alert('New name must be a non-empty filename with no slashes.');
+    // If user cancels, or no change, or invalid -> just exit gracefully.
+    // The finally below will ALWAYS clear renameBusy so the button works again.
+    if (canceled || noChange || invalid) {
+      if (invalid) alert('New name must be non-empty and contain no slashes.');
       return;
     }
-    if (newName === base) {
-      // No change; just exit cleanly
-      return;
-    }
 
-    // Do the rename
+    // Perform rename
     const res = await fetch('/api/catalog/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromKey, newName })
+      body: JSON.stringify({ fromKey, newName: next })
     });
     if (!res.ok) throw new Error(await res.text());
 
     const { key: toKey, lastModified } = await res.json();
 
-    // Update the “current item” key so subsequent actions use the new key
+    // Update current key for subsequent actions
     detailCurrentKey = toKey;
 
-    // Refresh the modal contents to show the new name + latest history
+    // Refresh the modal details so UI shows the new name + history
     await loadDetailsForKey(toKey);
 
-    // Update the corresponding row in the table: name cell, data-key attrs, and last-modified
-    const sel = CSS && CSS.escape ? `button.view-file[data-key="${CSS.escape(fromKey)}"]` : 'button.view-file';
-    let rowBtn = document.querySelector(sel);
-    if (!rowBtn || (rowBtn.dataset && rowBtn.dataset.key !== fromKey)) {
-      // Fallback: find by scanning
-      rowBtn = Array.from(document.querySelectorAll('button.view-file'))
+    // Update the row in the table (name cell, data-key attributes, last-modified)
+    const selector = (window.CSS && CSS.escape)
+      ? `button.view-file[data-key="${CSS.escape(fromKey)}"]`
+      : 'button.view-file';
+    let viewBtn = document.querySelector(selector);
+    if (!viewBtn || (viewBtn.dataset && viewBtn.dataset.key !== fromKey)) {
+      // fallback linear search
+      viewBtn = Array.from(document.querySelectorAll('button.view-file'))
         .find(b => b.dataset.key === fromKey);
     }
-    if (rowBtn) {
-      const tr = rowBtn.closest('tr');
+    if (viewBtn) {
+      const tr = viewBtn.closest('tr');
       if (tr) {
-        // First cell = key/name
-        const keyCell = tr.querySelector('td');
-        if (keyCell) keyCell.textContent = (toKey.split('/').pop() || toKey);
+        const nameCell = tr.querySelector('td'); // first cell = name/key
+        if (nameCell) nameCell.textContent = (toKey.split('/').pop() || toKey);
 
-        // Update all buttons on this row to the new key
         tr.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
           .forEach(b => b.dataset.key = toKey);
 
-        // 4th cell is "Last Modified" in your table
-        const lmCell = tr.querySelector('td:nth-child(4)');
-        if (lmCell && lastModified) lmCell.textContent = niceDate(lastModified);
+        const lmCell = tr.querySelector('td:nth-child(4)'); // "Last Modified" col
+        if (lmCell && lastModified) lmCell.textContent = typeof niceDate === 'function'
+          ? niceDate(lastModified)
+          : lastModified;
       }
     }
   } catch (err) {
-    alert(`Rename failed: ${err.message}`);
+    console.error(err);
+    alert(`Rename failed: ${err.message || err}`);
   } finally {
-    // Always re-enable the button (even on Cancel / no-change / errors)
-    btn.disabled = false;
+    // ALWAYS release the lock so the button becomes usable again
+    renameBusy = false;
   }
 });
 
