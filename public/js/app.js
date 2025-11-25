@@ -224,6 +224,7 @@ let nextToken = null;
 let currentPrefix = '';
 let detailCurrentKey = null;
 let renameBusy = false;
+let renameInFlight = false;
 
 async function loadDetailsForKey(key) {
   detailCurrentKey = key;
@@ -650,9 +651,9 @@ document.addEventListener('click', async (e) => {
 //Rename logic for modal
 detailRename?.addEventListener('click', async () => {
   if (renameBusy) return;               // don’t allow double-click races
-  if (!currentDetailKey) return;
+  if (!detailCurrentKey) return;
 
-  const oldKey = currentDetailKey;
+  const oldKey = detailCurrentKey;
   const base   = (itemKeyOnly(oldKey) || oldKey);
 
   const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
@@ -676,7 +677,7 @@ detailRename?.addEventListener('click', async () => {
     const { key: toKey, lastModified } = await res.json();
 
     // Update modal state
-    currentDetailKey = toKey;
+    detailCurrentKey = toKey;
     if (detailTitle) detailTitle.textContent = itemKeyOnly(toKey) || toKey;
 
     if (detailBody) {
