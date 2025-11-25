@@ -67,7 +67,7 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 
-// --- start the server
+// --- start the server!
 if (process.env.NODE_ENV !== 'test') {
   const port = process.env.PORT || 3000;
   app.listen(port, '0.0.0.0', () =>
