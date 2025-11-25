@@ -321,7 +321,7 @@ async function fetchList(prefix, token = null) {
       <td class="vf-right">${humanBytes(item.size)}</td>
       <td class="vf-nowrap">${niceDate(item.lastModified)}</td>
       <td class="vf-nowrap">
-        <button class="vf-btn vf-btn-view view-file" data-key="${item.key}">View</button>
+        <button class="vf-btn vf-btn-primary view-file" data-key="${item.key}">View</button>
       </td>
     `;
     catalogTable.appendChild(tr);
@@ -433,7 +433,7 @@ document.addEventListener('click', async (e) => {
       throw new Error(msg || `HTTP ${res.status}`);
     }
 
-    // 👇 we EXPECT the server to send { key, lastModified }
+    // we EXPECT the server to send { key, lastModified }
     const payload = await res.json();
     console.log('[rename response]', payload);
 
@@ -470,16 +470,76 @@ document.addEventListener('click', async (e) => {
 
 //Delegate "View"
 document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button.view-file');
+  const btn = e.target.closest('button.view-file');
   if (!btn) return;
 
-  // helper so we can retry with a different key
-  const showForKey = async (key, updateRowIfChanged = false) => {
-    openDetailModal();
-    if (detailBody) detailBody.innerHTML = '<p style="color:#9ca3af;">Loading…</p>';
+  // --- local refs to modal elements (no external helpers required)
+  const modal   = document.getElementById('detailModal');
+  const titleEl = document.getElementById('detailTitle');
+  const bodyEl  = document.getElementById('detailBody');
+  const renameEl= document.getElementById('detailRename');
+
+  const open = () => {
+    if (!modal) return;
+    modal.removeAttribute('hidden');
+    document.body.style.overflow = 'hidden';
+  };
+  const setBody = (html) => { if (bodyEl) bodyEl.innerHTML = html; };
+  const setTitle = (txt) => { if (titleEl) titleEl.textContent = txt || 'Item'; };
+
+  // helper to render the details + history
+  const renderDetails = (item, history) => {
+    const gwLink = item.url
+      ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>`
+      : '(no CID yet)';
+
+    const uploadedBy = item.uploader || '(unknown)';
+    const sizeStr    = item.size != null ? humanBytes(item.size) : '(unknown)';
+    const lmStr      = item.lastModified ? niceDate(item.lastModified) : '(unknown)';
+
+    let historyHtml = '';
+    const events = Array.isArray(history?.events) ? history.events : [];
+    if (!events.length) {
+      historyHtml = '<p style="color:#9ca3af;">No history recorded yet.</p>';
+    } else {
+      historyHtml = '<div class="history-list"><ul style="max-height:220px;overflow:auto;margin:0;padding:0 0 0 1rem;">';
+      for (const ev of events) {
+        const when = ev.ts ? niceDate(ev.ts) : '(unknown time)';
+        let desc = ev.action || 'event';
+        if (ev.action === 'upload')        desc = 'Uploaded';
+        else if (ev.action === 'replace')  desc = 'Re-uploaded (replaced existing file)';
+        else if (ev.action === 'rename')   desc = ev.fromKey
+              ? `Renamed from "${ev.fromKey}" to "${ev.key}"`
+              : `Renamed to "${ev.key}"`;
+        else if (ev.action === 'delete')   desc = 'Deleted';
+        const who = ev.user || 'unknown';
+        historyHtml += `<li style="margin:0.2rem 0;"><strong>${when}</strong> – ${desc} by <span style="color:#9ca3af;">${who}</span></li>`;
+      }
+      historyHtml += '</ul></div>';
+    }
+
+    setTitle(itemKeyOnly(item.key) || item.key);
+    setBody(`
+      <dl>
+        <dt>Current name</dt><dd>${itemKeyOnly(item.key) || item.key}</dd>
+        <dt>Full key</dt><dd>${item.key}</dd>
+        <dt>Uploader</dt><dd>${uploadedBy}</dd>
+        <dt>Size</dt><dd>${sizeStr}</dd>
+        <dt>Last modified</dt><dd>${lmStr}</dd>
+        <dt>CID / Gateway</dt><dd>${gwLink}</dd>
+      </dl>
+      <h3 style="font-size:0.9rem;margin:0.5rem 0;">Change history</h3>
+      ${historyHtml}
+    `);
+  };
+
+  // fetch item + history, following a rename if necessary
+  const loadForKey = async (key, updateRowIfChanged = false) => {
+    open();
+    setTitle(key);
+    setBody('<p style="color:#9ca3af;">Loading…</p>');
 
     try {
-      // fetch item + history in parallel
       const itemUrl = new URL('/api/catalog/item', window.location.origin);
       itemUrl.searchParams.set('key', key);
 
@@ -488,14 +548,14 @@ document.addEventListener('click', async (e) => {
 
       const [itemRes, histRes] = await Promise.all([ fetch(itemUrl), fetch(histUrl) ]);
 
-      // If the key no longer exists (someone renamed it), try to discover the new key
+      // if item 404's, try to discover the newest rename target from history
       if (itemRes.status === 404) {
         const histJson = await histRes.json().catch(() => ({ events: [] }));
-        const events = Array.isArray(histJson.events) ? histJson.events : [];
-        const lastRename = events.find(ev => ev.action === 'rename' && ev.key && ev.ts); // events are newest-first from our API
+        const events   = Array.isArray(histJson.events) ? histJson.events : [];
+        const lastRename = events.find(ev => ev.action === 'rename' && ev.key && ev.ts);
         if (lastRename && lastRename.key && lastRename.key !== key) {
-          // optionally fix the row so future clicks use the new key
           if (updateRowIfChanged) {
+            // update the row so future clicks use the new key
             const tr = btn.closest('tr');
             if (tr) {
               const keyCell = tr.querySelector('td');
@@ -504,74 +564,66 @@ document.addEventListener('click', async (e) => {
                 .forEach(b => b.dataset.key = lastRename.key);
             }
           }
-          // retry with the new key
-          return await showForKey(lastRename.key, false);
+          return await loadForKey(lastRename.key, false);
         }
-        // fallback: refresh the list so the user sees the new row
-        if (catalogTable) catalogTable.innerHTML = '';
-        nextToken = null;
-        await fetchList(currentPrefix || '', null);
-        if (detailBody) {
-          detailBody.innerHTML = `<p style="color:#fca5a5;">That item was renamed by someone else. I refreshed the list—click the new name to view it.</p>`;
+        // fallback: refresh the list so user sees the current state
+        if (typeof fetchList === 'function') {
+          if (typeof catalogTable !== 'undefined' && catalogTable) catalogTable.innerHTML = '';
+          if (typeof nextToken !== 'undefined') nextToken = null;
+          await fetchList((typeof currentPrefix !== 'undefined' ? currentPrefix : '') || '', null);
         }
+        setBody('<p style="color:#fca5a5;">That item was renamed by someone else. I refreshed the list—click the new name to view it.</p>');
         return;
       }
 
-      if (!itemRes.ok) throw new Error(`item failed: ${await itemRes.text()}`);
-      if (!histRes.ok) throw new Error(`history failed: ${await histRes.text()}`);
+      if (!itemRes.ok)  throw new Error(`item failed: ${await itemRes.text()}`);
+      if (!histRes.ok)  throw new Error(`history failed: ${await histRes.text()}`);
 
       const item = await itemRes.json();
-      const history = await histRes.json();
+      const hist = await histRes.json();
+      renderDetails(item, hist);
 
-      const gwLink = item.url
-        ? `<a href="${item.url}" target="_blank" rel="noopener">${item.cid || 'Open on gateway'}</a>`
-        : '(no CID yet)';
-      const uploadedBy = item.uploader || '(unknown)';
-      const sizeStr = item.size != null ? humanBytes(item.size) : '(unknown)';
-      const lmStr   = item.lastModified ? niceDate(item.lastModified) : '(unknown)';
+      // wire up Rename inside the modal (one-time per open)
+      if (renameEl) {
+        const renameHandler = async () => {
+          const base = item.key.split('/').pop();
+          const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
+          if (!newName || newName === base) return;
+          if (newName.includes('/')) { alert('New name must be a plain filename (no slashes).'); return; }
 
-      let historyHtml = '';
-      const events = Array.isArray(history.events) ? history.events : [];
-      if (!events.length) {
-        historyHtml = '<p style="color:#9ca3af;">No history recorded yet.</p>';
-      } else {
-        historyHtml = '<div class="history-list"><ul style="max-height:220px;overflow:auto;margin:0;padding:0 0 0 1rem;">';
-        for (const ev of events) {
-          const when = ev.ts ? niceDate(ev.ts) : '(unknown time)';
-          let desc = ev.action || 'event';
-          if (ev.action === 'upload') desc = 'Uploaded';
-          else if (ev.action === 'replace') desc = 'Re-uploaded (replaced existing file)';
-          else if (ev.action === 'rename') desc = ev.fromKey ? `Renamed from "${ev.fromKey}" to "${ev.key}"` : `Renamed to "${ev.key}"`;
-          else if (ev.action === 'delete') desc = 'Deleted';
-          const who = ev.user || 'unknown';
-          historyHtml += `<li style="margin:0.2rem 0;"><strong>${when}</strong> – ${desc} by <span style="color:#9ca3af;">${who}</span></li>`;
-        }
-        historyHtml += '</ul></div>';
+          const res = await fetch('/api/catalog/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fromKey: item.key, newName })
+          });
+          if (!res.ok) { alert(`Rename failed: ${await res.text()}`); return; }
+
+          const { key: toKey } = await res.json();
+          // update table row immediately
+          const tr = btn.closest('tr');
+          if (tr) {
+            const keyCell = tr.querySelector('td');
+            if (keyCell) keyCell.textContent = toKey;
+            tr.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
+              .forEach(b => b.dataset.key = toKey);
+          }
+          // reload modal for new key
+          await loadForKey(toKey, false);
+        };
+        // ensure we don't stack multiple listeners across opens
+        renameEl.replaceWith(renameEl.cloneNode(true));
+        const freshRenameBtn = document.getElementById('detailRename');
+        freshRenameBtn?.addEventListener('click', renameHandler, { once: true });
       }
 
-      if (detailTitle) detailTitle.textContent = itemKeyOnly(item.key) || item.key;
-      if (detailBody) {
-        detailBody.innerHTML = `
-          <dl>
-            <dt>Current name</dt><dd>${itemKeyOnly(item.key) || item.key}</dd>
-            <dt>Full key</dt><dd>${item.key}</dd>
-            <dt>Uploader</dt><dd>${uploadedBy}</dd>
-            <dt>Size</dt><dd>${sizeStr}</dd>
-            <dt>Last modified</dt><dd>${lmStr}</dd>
-            <dt>CID / Gateway</dt><dd>${gwLink}</dd>
-          </dl>
-          <h3 style="font-size:0.9rem;margin:0.5rem 0;">Change history</h3>
-          ${historyHtml}
-        `;
-      }
     } catch (err) {
       console.error(err);
-      if (detailBody) detailBody.innerHTML = `<p style="color:#fca5a5;">Error: ${err.message}</p>`;
+      setBody(`<p style="color:#fca5a5;">Error: ${err.message}</p>`);
     }
   };
 
-  const initialKey = btn.dataset.key;
-  if (initialKey) await showForKey(initialKey, true);
+  const clickedKey = btn.dataset.key;
+  if (clickedKey) await loadForKey(clickedKey, true);
 });
 
 //Rename logic for modal
