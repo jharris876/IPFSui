@@ -429,66 +429,80 @@ document.addEventListener('click', async (e) => {
 
 // Delegate "Rename"
 document.addEventListener('click', async (e) => {
-   if (!detailCurrentKey) return;
+  const btn = e.currentTarget;
+  if (!detailCurrentKey) return;
 
-  // suggest current leaf name
-  const base = detailCurrentKey.split('/').pop() || detailCurrentKey;
-  const newName = prompt(`Rename\n\n${base}\n\nto:`, base);
+  // Prevent double-clicks
+  if (btn.disabled) return;
+  btn.disabled = true;
 
-  // If user cancels or doesn't change, do nothing.
-  if (!newName || newName === base) return;
-
-  // Simple client-side validation
-  if (newName.includes('/')) {
-    alert('New name must be a plain filename (no slashes).');
-    return;
-  }
-
-  detailRename.disabled = true;
   try {
+    const fromKey = detailCurrentKey;
+    const base = fromKey.split('/').pop() || '';
+
+    // Prompt the user
+    const input = window.prompt(`Rename\n\n${base}\n\nto:`, base);
+
+    // User pressed Cancel -> do nothing, but make sure the button is re-enabled in finally
+    if (input === null) return;
+
+    const newName = input.trim();
+
+    // No slashes allowed; also ignore "no change"
+    if (!newName || newName.includes('/')) {
+      alert('New name must be a non-empty filename with no slashes.');
+      return;
+    }
+    if (newName === base) {
+      // No change; just exit cleanly
+      return;
+    }
+
+    // Do the rename
     const res = await fetch('/api/catalog/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromKey: detailCurrentKey, newName })
+      body: JSON.stringify({ fromKey, newName })
     });
     if (!res.ok) throw new Error(await res.text());
+
     const { key: toKey, lastModified } = await res.json();
 
-    // Update our modal's current key
+    // Update the “current item” key so subsequent actions use the new key
     detailCurrentKey = toKey;
 
-    // Update the row in the table (name & data-key on buttons)
-    const row = document.querySelector(`button.view-file[data-key="${detailCurrentKey}"]`)
-                 ?.closest('tr') || [...document.querySelectorAll('button.view-file')]
-                 .map(b => b.closest('tr'))
-                 .find(tr => tr?.querySelector('button.view-file')?.dataset.key === detailCurrentKey);
+    // Refresh the modal contents to show the new name + latest history
+    await loadDetailsForKey(toKey);
 
-    if (row) {
-      const tds = row.querySelectorAll('td');
-      // 0: name, 1: uploader, 2: size, 3: lastModified, 4: action
-      if (tds[0]) tds[0].textContent = (toKey.split('/').pop() || toKey);
-      if (tds[3] && lastModified) tds[3].textContent = niceDate(lastModified);
-      row.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
-        .forEach(b => b.dataset.key = toKey);
+    // Update the corresponding row in the table: name cell, data-key attrs, and last-modified
+    const sel = CSS && CSS.escape ? `button.view-file[data-key="${CSS.escape(fromKey)}"]` : 'button.view-file';
+    let rowBtn = document.querySelector(sel);
+    if (!rowBtn || (rowBtn.dataset && rowBtn.dataset.key !== fromKey)) {
+      // Fallback: find by scanning
+      rowBtn = Array.from(document.querySelectorAll('button.view-file'))
+        .find(b => b.dataset.key === fromKey);
     }
+    if (rowBtn) {
+      const tr = rowBtn.closest('tr');
+      if (tr) {
+        // First cell = key/name
+        const keyCell = tr.querySelector('td');
+        if (keyCell) keyCell.textContent = (toKey.split('/').pop() || toKey);
 
-    // Refresh the modal details to show the new name & CID link
-    await (async () => {
-      const itemUrl = new URL('/api/catalog/item', window.location.origin);
-      itemUrl.searchParams.set('key', detailCurrentKey);
-      const histUrl = new URL('/api/catalog/history', window.location.origin);
-      histUrl.searchParams.set('key', detailCurrentKey);
-      const [itemRes, histRes] = await Promise.all([fetch(itemUrl), fetch(histUrl)]);
-      if (!itemRes.ok) throw new Error(await itemRes.text());
-      if (!histRes.ok) throw new Error(await histRes.text());
-      const item = await itemRes.json();
-      const history = await histRes.json();
-      renderDetailModal(item, history); // your existing function that writes detailBody + title
-    })();
+        // Update all buttons on this row to the new key
+        tr.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
+          .forEach(b => b.dataset.key = toKey);
+
+        // 4th cell is "Last Modified" in your table
+        const lmCell = tr.querySelector('td:nth-child(4)');
+        if (lmCell && lastModified) lmCell.textContent = niceDate(lastModified);
+      }
+    }
   } catch (err) {
     alert(`Rename failed: ${err.message}`);
   } finally {
-    detailRename.disabled = false;
+    // Always re-enable the button (even on Cancel / no-change / errors)
+    btn.disabled = false;
   }
 });
 
