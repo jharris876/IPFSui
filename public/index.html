@@ -51,11 +51,11 @@
     <section class="vf-card">
       <div class="vf-card-head">
         <h2 class="vf-card-title">Bucket Catalog</h2>
-        <div class="vf-filter">
+        <form id="catalogForm" class="vf-filter" style="display:flex; gap:.5rem; align-items:center;">
           <input id="catalogPrefix" placeholder='Filter by prefix (e.g. "2025/")' />
-          <button id="catalogLoad" class="vf-btn vf-btn-secondary">Load</button>
+          <button class="vf-btn vf-btn-secondary" type="submit">Load</button>
           <span id="catalogMeta" class="vf-meta"></span>
-        </div>
+        </form>
       </div>
 
       <div class="vf-table-wrap">
