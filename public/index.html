@@ -89,6 +89,17 @@
         </div>
       </header>
       <section id="detailBody" class="vf-modal-body"><!-- filled by app.js --></section>
+      <!-- Rename sub-dialog (hidden by default) -->
+      <div id="renamePanel" class="vf-rename" hidden>
+        <div class="vf-rename-row">
+          <label for="renameInput" class="vf-rename-label">Rename</label>
+          <input id="renameInput" class="vf-rename-input" autocomplete="off" />
+        </div>
+        <div class="vf-rename-actions">
+          <button id="renameCancel" type="button" class="vf-btn vf-btn-outline">Cancel</button>
+          <button id="renameConfirm" type="button" class="vf-btn vf-btn-primary">Save</button>
+        </div>
+      </div>
     </div>
   </div>
   <script src="/js/app.js"></script>

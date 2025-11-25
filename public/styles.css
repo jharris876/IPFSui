@@ -377,3 +377,42 @@ button.view-file.vf-btn.vf-btn-primary {
   background: #2563eb;
   border-color: rgba(59,130,246,0.6);
 }
+
+/* Inline rename panel inside the detail modal */
+.vf-rename {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,.03);
+}
+.vf-rename-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: .75rem;
+  align-items: center;
+}
+.vf-rename-label {
+  color: #9ca3af;
+  font-size: .9rem;
+}
+.vf-rename-input {
+  width: 100%;
+  background: #0f172a;
+  color: #e5e7eb;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  padding: .55rem .7rem;
+  outline: none;
+}
+.vf-rename-input:focus {
+  border-color: rgba(94,234,212,.6);
+  box-shadow: 0 0 0 3px rgba(94,234,212,.15);
+}
+.vf-rename-actions {
+  display: flex;
+  gap: .5rem;
+  justify-content: flex-end;
+  margin-top: .75rem;
+}
+

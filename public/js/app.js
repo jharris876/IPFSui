@@ -223,7 +223,6 @@ document.addEventListener('keydown', (e) => {
 let nextToken = null;
 let currentPrefix = '';
 let detailCurrentKey = null;
-let renameBusy = false;
 let renameInFlight = false;
 
 async function loadDetailsForKey(key) {
@@ -427,39 +426,62 @@ document.addEventListener('click', async (e) => {
   }
 });
 
-// --- Delegate "Rename" inside the View modal (robust against Cancel / no-change) ---
-if (typeof detailCurrentKey === 'undefined') {
-  // make sure the symbol exists; your code should set it when opening the modal
-  window.detailCurrentKey = undefined;
+// ===== Rename sub-dialog wiring =====
+const renamePanel   = document.getElementById('renamePanel');
+const renameInput   = document.getElementById('renameInput');
+const renameCancel  = document.getElementById('renameCancel');
+const renameConfirm = document.getElementById('renameConfirm');
+
+function showRenamePanel(suggestedName) {
+  if (!renamePanel) return;
+  renameInput.value = suggestedName || '';
+  renamePanel.hidden = false;
+  // small timeout so focus doesn’t get swallowed by click transitions
+  setTimeout(() => renameInput?.focus(), 0);
+}
+function hideRenamePanel() {
+  if (renamePanel) renamePanel.hidden = true;
 }
 
-detailRename?.addEventListener('click', async (e) => {
-  // guard against double-clicks or stuck states
+renameCancel?.addEventListener('click', () => {
+  hideRenamePanel();               // user cancel — nothing else to do
+});
+
+// ===== Modal Rename button =====
+let renameBusy = false;
+
+detailRename?.addEventListener('click', () => {
   if (renameBusy) return;
+  // derive just the filename (no prefix) from the current key
+  const fromKey = window.detailCurrentKey;
+  if (!fromKey) return;
+
+  const base = (fromKey.split('/').pop() || '').trim();
+  showRenamePanel(base);
+});
+
+// ===== Confirm rename =====
+renameConfirm?.addEventListener('click', async () => {
+  if (renameBusy) return;
+  const fromKey = window.detailCurrentKey;
+  if (!fromKey) return;
+
+  const oldBase = (fromKey.split('/').pop() || '').trim();
+  const next    = (renameInput?.value || '').trim();
+
+  // Validate (no slashes, not empty)
+  if (!next || next.includes('/')) {
+    alert('New name must be non-empty and contain no slashes.');
+    return; // remain open so user can fix it
+  }
+  // No change -> just close the panel (button remains usable)
+  if (next === oldBase) {
+    hideRenamePanel();
+    return;
+  }
+
   renameBusy = true;
-
   try {
-    const fromKey = detailCurrentKey;
-    if (!fromKey) return; // nothing to rename
-
-    const base = (fromKey.split('/').pop() || '').trim();
-
-    // Synchronous prompt – may return null on cancel
-    const raw = window.prompt(`Rename\n\n${base}\n\nto:`, base);
-
-    const canceled  = (raw === null);
-    const next      = canceled ? '' : String(raw).trim();
-    const noChange  = !canceled && next === base;
-    const invalid   = !canceled && (next.length === 0 || next.includes('/'));
-
-    // If user cancels, or no change, or invalid -> just exit gracefully.
-    // The finally below will ALWAYS clear renameBusy so the button works again.
-    if (canceled || noChange || invalid) {
-      if (invalid) alert('New name must be non-empty and contain no slashes.');
-      return;
-    }
-
-    // Perform rename
     const res = await fetch('/api/catalog/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -469,43 +491,42 @@ detailRename?.addEventListener('click', async (e) => {
 
     const { key: toKey, lastModified } = await res.json();
 
-    // Update current key for subsequent actions
-    detailCurrentKey = toKey;
+    // Update global key for subsequent actions
+    window.detailCurrentKey = toKey;
 
-    // Refresh the modal details so UI shows the new name + history
+    // Refresh the modal details
     await loadDetailsForKey(toKey);
 
-    // Update the row in the table (name cell, data-key attributes, last-modified)
+    // Update the table row: name cell + data-key + modified
     const selector = (window.CSS && CSS.escape)
       ? `button.view-file[data-key="${CSS.escape(fromKey)}"]`
       : 'button.view-file';
     let viewBtn = document.querySelector(selector);
-    if (!viewBtn || (viewBtn.dataset && viewBtn.dataset.key !== fromKey)) {
-      // fallback linear search
+    if (!viewBtn || viewBtn.dataset.key !== fromKey) {
       viewBtn = Array.from(document.querySelectorAll('button.view-file'))
         .find(b => b.dataset.key === fromKey);
     }
     if (viewBtn) {
       const tr = viewBtn.closest('tr');
       if (tr) {
-        const nameCell = tr.querySelector('td'); // first cell = name/key
-        if (nameCell) nameCell.textContent = (toKey.split('/').pop() || toKey);
+        const keyCell = tr.querySelector('td'); // first cell = name/key
+        if (keyCell) keyCell.textContent = (toKey.split('/').pop() || toKey);
 
         tr.querySelectorAll('button.view-file, button.get-cid, button.rename-file')
           .forEach(b => b.dataset.key = toKey);
 
-        const lmCell = tr.querySelector('td:nth-child(4)'); // "Last Modified" col
-        if (lmCell && lastModified) lmCell.textContent = typeof niceDate === 'function'
-          ? niceDate(lastModified)
-          : lastModified;
+        const lmCell = tr.querySelector('td:nth-child(4)');
+        if (lmCell && typeof niceDate === 'function' && lastModified) {
+          lmCell.textContent = niceDate(lastModified);
+        }
       }
     }
   } catch (err) {
     console.error(err);
     alert(`Rename failed: ${err.message || err}`);
   } finally {
-    // ALWAYS release the lock so the button becomes usable again
-    renameBusy = false;
+    hideRenamePanel();             // ALWAYS close the panel
+    renameBusy = false;            // ALWAYS release guard
   }
 });
 
